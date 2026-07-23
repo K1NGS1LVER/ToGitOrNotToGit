@@ -2,6 +2,22 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+## Status: All 7 tasks complete, merged to main (2026-07-24)
+
+Executed via subagent-driven-development: one implementer + one reviewer per task, fixes re-reviewed until clean, then a whole-branch review before merge. Branch `tocommit-core-pipeline` merged into `main` at `ab11835` (fast-forward), worktree and branch cleaned up. One follow-up commit `0ca402c` moved `main.go` to `cmd/tocommit/main.go` after merge (see the design doc's Implementation Status section for why).
+
+Per-task outcomes (commit ranges are on the now-deleted feature branch, still reachable via `main`'s history):
+- **Task 1 (config):** clean. 1 Minor left as-is: `go.mod` marked `yaml.v3` `// indirect` despite direct import (cosmetic, `go mod tidy` fixes it).
+- **Task 2 (diff):** 1 Important fixed - the `ChangedFiles` test only checked slice length, not contents/order.
+- **Task 3 (severity):** clean, no findings.
+- **Task 4 (llm):** 2 fix rounds - non-200 Groq responses were discarding the response body (lost the actual error reason); then that fix shipped without a test proving it, added one.
+- **Task 5 (cmd wiring):** fixed - an out-of-scope commit touching Task 2's test file was rebased out of the branch entirely; a missing test for the `commit`-source bypass (only `message` was tested) was added.
+- **Task 6 (install/uninstall):** clean. 1 Minor left as-is: `uninstall`'s foreign-hook-refusal path is untested (brief didn't require it).
+- **Task 7 (main.go + integration test):** clean.
+- **Final whole-branch review:** 1 Important + 2 Minor, all fixed in one follow-up commit - `go.mod` was pinned to a specific patch version (`go 1.26.5`) instead of the "1.22+" floor; the severity→persona→`llm.Request` wiring had no test proving `Persona` actually gets threaded through; `uninstall`'s foreign-hook test gap (same as Task 6's) was closed here instead.
+
+Real end-to-end smoke test against the live Groq API passed post-merge (one call, respecting Groq's rate limits).
+
 **Goal:** Build the v1 `tocommit` CLI: a git `prepare-commit-msg` hook that scores staged diffs by severity, asks Groq for a theatrical conventional-commit message, and falls back to a plain message if Groq fails or times out.
 
 **Architecture:** Cobra CLI (`cmd` package) wires four independent `internal` packages - `config` (YAML+env), `diff` (git exec + parsing + fallback formatting), `severity` (pure scoring function), `llm` (Groq HTTP client behind a `Client` interface) - together in `cmd/run.go`. `tocommit install`/`uninstall` manage the hook file itself.

@@ -1,5 +1,19 @@
 # tocommit v1 (core pipeline) - Design
 
+## Implementation Status: Shipped (2026-07-24)
+
+Built via the paired plan at `docs/superpowers/plans/2026-07-23-tocommit-core-pipeline.md`, executed task-by-task with subagent implementers + reviewers, merged to `main` at commit `ab11835`, then one follow-up fix at `0ca402c`.
+Real end-to-end smoke test against the live Groq API passed.
+
+Deviations from this doc, found during implementation/review and fixed:
+
+- **Binary entrypoint moved.** The plan put `main.go` at the repo root. `go install .` from the root names the binary after the module's last path segment (`ToGitOrNotToGit`), not `tocommit`. Fixed post-merge by moving it to `cmd/tocommit/main.go` (commit `0ca402c`) - the Go-idiomatic layout, so `go install ./cmd/tocommit` always produces the right name.
+- **`go.mod` version floor.** First committed as `go 1.26.5` (a specific-version pin, since that's what the implementing environment had installed) rather than this doc's "Go 1.22+" floor. Corrected to `go 1.22` in the final whole-branch review fix.
+- **Non-200 Groq responses now include the response body** (bounded to 4096 bytes) in the returned error, not just the status code - found missing during Task 4's review, since upstream error detail (bad model, invalid key, rate limit) is the primary debugging signal for this CLI.
+- Everything else in this doc - severity tiers, fallback format, config shape, hook bypass sources, package boundaries (single `internal/llm`, no separate fallback package) - matches what shipped exactly.
+
+See the plan file for the task-by-task build log and full review history.
+
 ## Goal
 
 A Go CLI (`tocommit`) installable as a git `prepare-commit-msg` hook.
