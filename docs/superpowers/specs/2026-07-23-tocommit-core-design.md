@@ -6,7 +6,7 @@ A Go CLI (`tocommit`) installable as a git `prepare-commit-msg` hook.
 On `git commit`, it reads the staged diff, scores its severity, asks Groq for a theatrical conventional-commit message in a persona matching that severity, and writes it into `COMMIT_EDITMSG`.
 If Groq fails or times out, it falls back to a plain, honest conventional-commit message so the developer is never blocked.
 
-v1 scope is the core pipeline only: hook install, diff/severity engine, Groq client, fallback, YAML+env config.
+v1 scope is the core pipeline only: hook install, diff/severity engine, Groq client, YAML+env config.
 No `huh` config wizard and no `bubbletea` interactive preview yet - both are explicitly deferred to v2.
 
 ## Non-goals (v1)
@@ -36,7 +36,7 @@ git commit
              |            \
              | success      \ error/timeout
              v               v
-        write message    fallback.PlainMessage(stats)
+        write message    stats.FallbackMessage()
              |
              v
         overwrite COMMIT_EDITMSG file
@@ -54,13 +54,14 @@ git commit
   ```
   Fails loudly if a hook already exists there and isn't ours (checks for a marker comment), so it never silently clobbers another hook.
 - `tocommit uninstall` - removes the hook if it's ours.
-- Bypass: if git invoked the hook with a commit source of `message` or `merge` (git passes this as `$2`), `tocommit run` exits 0 immediately without touching the file - covers `-m` and `--amend` per the original requirement, using git's own mechanism rather than re-parsing flags.
+- Bypass: git passes a commit-source as `$2` to `prepare-commit-msg` - `message` when `-m`/`-F` was given, `commit` when `-c`/`-C`/`--amend` was given. If `$2` is `message` or `commit`, `tocommit run` exits 0 immediately without touching the file - covers `-m` and `--amend` per the original requirement, using git's own mechanism rather than re-parsing flags. (`merge`/`template`/`squash` sources are left alone - only the two explicitly-required flags bypass.)
 
 ### 2. `internal/diff`
 
 - Runs `git diff --cached --numstat` -> parses added/deleted/files-changed counts.
 - Runs `git diff --cached` -> truncates to a fixed byte budget (e.g. 8000 chars) so prompt size and latency stay bounded on huge diffs.
 - Returns a `Stats{FilesChanged, Insertions, Deletions, ChangedFiles []string}` and the truncated raw diff text.
+- `Stats.FallbackMessage() string` - builds `chore: update N files (+X/-Y)` with no LLM call, deterministic (always `chore` in v1, on purpose - inferring `fix`/`feat` is out of scope). Used whenever `llm.Generate` errors. Lives here rather than its own package - it's a one-line formatter on data this package already owns.
 
 ### 3. `internal/severity`
 
@@ -76,16 +77,14 @@ Each `Tier` maps to a persona name (`victorian-gothic`, `soap-opera`, `shakespea
 
 ### 4. `internal/llm`
 
-- `Client` interface: `Generate(ctx context.Context, req Request) (string, error)`.
-- `groq.Client` - the only implementation in v1. Plain `net/http` POST to `https://api.groq.com/openai/v1/chat/completions` (OpenAI-compatible schema), model + API key from config.
+Single package, two files - no `groq` subpackage until a second provider actually exists:
+
+- `client.go` - `Client` interface: `Generate(ctx context.Context, req Request) (string, error)`.
+- `groq.go` - `GroqClient`, the only implementation in v1. Plain `net/http` POST to `https://api.groq.com/openai/v1/chat/completions` (OpenAI-compatible schema), model + API key from config.
 - Prompt template fixed in code: system prompt sets persona + enforces `type(scope): summary` first line + conventional-commit types, user message carries diff stats + truncated diff.
 - Caller wraps the call in `context.WithTimeout` (config default 2500ms); on any error (timeout, non-200, malformed response) returns the error untouched - no retries in v1 (nothing later depends on retry behavior; add if false-positive timeouts turn out to be a real problem).
 
-### 5. `internal/fallback`
-
-- `PlainMessage(stats Stats) string` - builds `chore: update N files (+X/-Y)` (or `fix`/`feat` if inferable is out of scope - always `chore` in v1, keeps this deterministic and dumb on purpose) with no LLM call. Used whenever `llm.Generate` errors.
-
-### 6. `internal/config`
+### 5. `internal/config`
 
 - Loads `~/.config/tocommit/config.yaml`:
   ```yaml
@@ -110,8 +109,8 @@ Each `Tier` maps to a persona name (`victorian-gothic`, `soap-opera`, `shakespea
 
 - `internal/severity`: table-driven unit tests over the tier boundaries and the override list.
 - `internal/diff`: unit test the `numstat` parser against fixture output strings (no real git exec needed for the parser itself).
-- `internal/llm/groq`: unit test request building and response parsing against a `httptest.Server`; a context-cancellation test confirms timeout triggers the error path.
-- `internal/fallback`: unit test message formatting.
+- `internal/llm`: unit test request building and response parsing against a `httptest.Server`; a context-cancellation test confirms timeout triggers the error path.
+- `internal/diff`: unit test `FallbackMessage` formatting alongside the numstat parser tests above.
 - One integration-style test for `cmd run`: real temp git repo, staged change, fake LLM client injected, asserts final `COMMIT_EDITMSG` content for both the success and the fallback path.
 
 ## Deferred to v2
