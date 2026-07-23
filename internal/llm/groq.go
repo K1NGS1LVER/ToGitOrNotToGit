@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 )
@@ -84,7 +85,8 @@ func (c *GroqClient) Generate(ctx context.Context, req Request) (string, error) 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("groq: unexpected status %d", resp.StatusCode)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("groq: unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var parsed chatResponse
