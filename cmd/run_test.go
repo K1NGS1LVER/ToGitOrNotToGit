@@ -52,6 +52,24 @@ func TestRunHook_BypassOnMessageSource(t *testing.T) {
 	}
 }
 
+func TestRunHook_BypassOnCommitSource(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	if err := os.WriteFile(msgFile, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := runHook(msgFile, "commit", testDeps(diff.Stats{FilesChanged: 1}, fakeClient{message: "should not be used"}))
+	if err != nil {
+		t.Fatalf("runHook returned error: %v", err)
+	}
+
+	got, _ := os.ReadFile(msgFile)
+	if string(got) != "original" {
+		t.Errorf("message file = %q, want untouched", got)
+	}
+}
+
 func TestRunHook_NoStagedChanges(t *testing.T) {
 	dir := t.TempDir()
 	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
