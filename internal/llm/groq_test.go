@@ -38,6 +38,12 @@ func TestGroqClient_Generate_Success(t *testing.T) {
 func TestGroqClient_Generate_NonOKStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]string{
+				"message": "invalid api key",
+			},
+		})
 	}))
 	defer server.Close()
 
@@ -47,6 +53,9 @@ func TestGroqClient_Generate_NonOKStatus(t *testing.T) {
 	_, err := client.Generate(context.Background(), Request{})
 	if err == nil {
 		t.Fatal("Generate returned nil error, want error for 500 response")
+	}
+	if !strings.Contains(err.Error(), "invalid api key") {
+		t.Errorf("error message = %q, want it to contain response body with 'invalid api key'", err.Error())
 	}
 }
 
