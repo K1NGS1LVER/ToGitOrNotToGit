@@ -74,3 +74,26 @@ func TestInstall_RefusesToClobberForeignHook(t *testing.T) {
 		t.Errorf("foreign hook was overwritten")
 	}
 }
+
+func TestUninstall_RefusesToRemoveForeignHook(t *testing.T) {
+	repo := initTestRepo(t)
+	chdir(t, repo)
+
+	hookFile := filepath.Join(repo, ".git", "hooks", "prepare-commit-msg")
+	foreignContent := "#!/bin/sh\necho someone elses hook\n"
+	if err := os.WriteFile(hookFile, []byte(foreignContent), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := uninstallCmd.RunE(uninstallCmd, nil); err == nil {
+		t.Fatal("uninstall returned nil error, want refusal to remove foreign hook")
+	}
+
+	data, err := os.ReadFile(hookFile)
+	if err != nil {
+		t.Fatalf("foreign hook was removed: %v", err)
+	}
+	if string(data) != foreignContent {
+		t.Errorf("foreign hook content = %q, want untouched %q", data, foreignContent)
+	}
+}

@@ -14,9 +14,11 @@ import (
 type fakeClient struct {
 	message string
 	err     error
+	gotReq  *llm.Request
 }
 
-func (f fakeClient) Generate(ctx context.Context, req llm.Request) (string, error) {
+func (f *fakeClient) Generate(ctx context.Context, req llm.Request) (string, error) {
+	f.gotReq = &req
 	return f.message, f.err
 }
 
@@ -41,7 +43,7 @@ func TestRunHook_BypassOnMessageSource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := runHook(msgFile, "message", testDeps(diff.Stats{FilesChanged: 1}, fakeClient{message: "should not be used"}))
+	err := runHook(msgFile, "message", testDeps(diff.Stats{FilesChanged: 1}, &fakeClient{message: "should not be used"}))
 	if err != nil {
 		t.Fatalf("runHook returned error: %v", err)
 	}
@@ -59,7 +61,7 @@ func TestRunHook_BypassOnCommitSource(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := runHook(msgFile, "commit", testDeps(diff.Stats{FilesChanged: 1}, fakeClient{message: "should not be used"}))
+	err := runHook(msgFile, "commit", testDeps(diff.Stats{FilesChanged: 1}, &fakeClient{message: "should not be used"}))
 	if err != nil {
 		t.Fatalf("runHook returned error: %v", err)
 	}
@@ -77,7 +79,7 @@ func TestRunHook_NoStagedChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err := runHook(msgFile, "", testDeps(diff.Stats{FilesChanged: 0}, fakeClient{message: "should not be used"}))
+	err := runHook(msgFile, "", testDeps(diff.Stats{FilesChanged: 0}, &fakeClient{message: "should not be used"}))
 	if err != nil {
 		t.Fatalf("runHook returned error: %v", err)
 	}
@@ -96,7 +98,8 @@ func TestRunHook_WritesLLMMessageOnSuccess(t *testing.T) {
 	}
 
 	stats := diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}
-	err := runHook(msgFile, "", testDeps(stats, fakeClient{message: "feat: a tale of two files"}))
+	client := &fakeClient{message: "feat: a tale of two files"}
+	err := runHook(msgFile, "", testDeps(stats, client))
 	if err != nil {
 		t.Fatalf("runHook returned error: %v", err)
 	}
@@ -104,6 +107,13 @@ func TestRunHook_WritesLLMMessageOnSuccess(t *testing.T) {
 	got, _ := os.ReadFile(msgFile)
 	if string(got) != "feat: a tale of two files\n" {
 		t.Errorf("message file = %q, want the LLM message", got)
+	}
+
+	if client.gotReq == nil {
+		t.Fatal("client did not receive a request")
+	}
+	if want := "victorian-gothic"; client.gotReq.Persona != want {
+		t.Errorf("request Persona = %q, want %q", client.gotReq.Persona, want)
 	}
 }
 
@@ -115,7 +125,7 @@ func TestRunHook_FallsBackOnLLMError(t *testing.T) {
 	}
 
 	stats := diff.Stats{FilesChanged: 2, Insertions: 5, Deletions: 1}
-	err := runHook(msgFile, "", testDeps(stats, fakeClient{err: errTestLLMFailure}))
+	err := runHook(msgFile, "", testDeps(stats, &fakeClient{err: errTestLLMFailure}))
 	if err != nil {
 		t.Fatalf("runHook returned error: %v", err)
 	}

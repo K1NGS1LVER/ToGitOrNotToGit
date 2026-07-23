@@ -51,7 +51,7 @@ func TestIntegration_RunHook_EndToEnd_Success(t *testing.T) {
 		},
 		Diff: diff.Collect,
 		NewClient: func(cfg config.Config) llm.Client {
-			return fakeClient{message: "feat: a new file enters the stage"}
+			return &fakeClient{message: "feat: a new file enters the stage"}
 		},
 	}
 
@@ -80,7 +80,7 @@ func TestIntegration_RunHook_EndToEnd_FallsBackOnLLMError(t *testing.T) {
 		},
 		Diff: diff.Collect,
 		NewClient: func(cfg config.Config) llm.Client {
-			return fakeClient{err: context.DeadlineExceeded}
+			return &fakeClient{err: context.DeadlineExceeded}
 		},
 	}
 
