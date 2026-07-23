@@ -57,6 +57,12 @@ func TestParseNumstat(t *testing.T) {
 				len(got.ChangedFiles) != len(tt.want.ChangedFiles) {
 				t.Errorf("parseNumstat(%q) = %+v, want %+v", tt.output, got, tt.want)
 			}
+			for i, f := range got.ChangedFiles {
+				if i >= len(tt.want.ChangedFiles) || f != tt.want.ChangedFiles[i] {
+					t.Errorf("parseNumstat(%q) = %+v, want %+v", tt.output, got, tt.want)
+					break
+				}
+			}
 		})
 	}
 }
