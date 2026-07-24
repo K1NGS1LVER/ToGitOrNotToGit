@@ -45,11 +45,20 @@ func LoadFrom(path string) (Config, error) {
 	return cfg, nil
 }
 
-// Load reads config from the standard user location.
-func Load() (Config, error) {
+// DefaultPath returns the standard user location for tocommit's config file.
+func DefaultPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return Config{}, fmt.Errorf("resolving home directory: %w", err)
+		return "", fmt.Errorf("resolving home directory: %w", err)
 	}
-	return LoadFrom(filepath.Join(home, ".config", "tocommit", "config.yaml"))
+	return filepath.Join(home, ".config", "tocommit", "config.yaml"), nil
+}
+
+// Load reads config from the standard user location.
+func Load() (Config, error) {
+	path, err := DefaultPath()
+	if err != nil {
+		return Config{}, err
+	}
+	return LoadFrom(path)
 }

@@ -20,7 +20,7 @@ var configCmd = &cobra.Command{
 	Use:   "config",
 	Short: "Interactively edit tocommit's config file",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		path, err := configFilePath()
+		path, err := config.DefaultPath()
 		if err != nil {
 			return err
 		}
@@ -50,6 +50,7 @@ var configCmd = &cobra.Command{
 			return fmt.Errorf("running config form: %w", err)
 		}
 
+		// error impossible here: huh's Validate above already rejected non-numeric input
 		cfg.TimeoutMS, _ = strconv.Atoi(timeoutStr)
 
 		if err := saveConfig(cfg, path); err != nil {
@@ -58,14 +59,6 @@ var configCmd = &cobra.Command{
 		fmt.Println("Saved config to", path)
 		return nil
 	},
-}
-
-func configFilePath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolving home directory: %w", err)
-	}
-	return filepath.Join(home, ".config", "tocommit", "config.yaml"), nil
 }
 
 func saveConfig(cfg config.Config, path string) error {
