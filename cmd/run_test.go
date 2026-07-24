@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,13 +13,23 @@ import (
 )
 
 type fakeClient struct {
-	message string
-	err     error
-	gotReq  *llm.Request
+	message   string
+	messages  []string
+	err       error
+	gotReq    *llm.Request
+	callCount int
 }
 
 func (f *fakeClient) Generate(ctx context.Context, req llm.Request) (string, error) {
 	f.gotReq = &req
+	f.callCount++
+	if len(f.messages) > 0 {
+		idx := f.callCount - 1
+		if idx >= len(f.messages) {
+			idx = len(f.messages) - 1
+		}
+		return f.messages[idx], f.err
+	}
 	return f.message, f.err
 }
 
@@ -32,6 +43,10 @@ func testDeps(stats diff.Stats, client llm.Client) hookDeps {
 		},
 		NewClient: func(cfg config.Config) llm.Client {
 			return client
+		},
+		IsTTY: func() bool { return false },
+		RunTUI: func(initial string, regen func() (string, error)) (string, bool, error) {
+			panic("RunTUI should not be called when IsTTY is false")
 		},
 	}
 }
@@ -137,3 +152,190 @@ func TestRunHook_FallsBackOnLLMError(t *testing.T) {
 }
 
 var errTestLLMFailure = context.DeadlineExceeded
+
+func TestRunHook_SkipsTUIWhenNotTTY(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	os.WriteFile(msgFile, []byte(""), 0o644)
+
+	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, &fakeClient{message: "feat: plain message"})
+	deps.Config = func() (config.Config, error) {
+		return config.Config{Provider: "groq", Model: "m", TimeoutMS: 2500, APIKey: "k", TUI: true}, nil
+	}
+
+	if err := runHook(msgFile, "", deps); err != nil {
+		t.Fatalf("runHook returned error: %v", err)
+	}
+
+	got, _ := os.ReadFile(msgFile)
+	if string(got) != "feat: plain message\n" {
+		t.Errorf("message file = %q, want v1-style plain write", got)
+	}
+}
+
+func TestRunHook_SkipsTUIWhenDisabledInConfig(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	os.WriteFile(msgFile, []byte(""), 0o644)
+
+	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, &fakeClient{message: "feat: plain message"})
+	deps.IsTTY = func() bool { return true }
+	deps.Config = func() (config.Config, error) {
+		return config.Config{Provider: "groq", Model: "m", TimeoutMS: 2500, APIKey: "k", TUI: false}, nil
+	}
+	deps.RunTUI = func(initial string, regen func() (string, error)) (string, bool, error) {
+		panic("RunTUI should not be called when cfg.TUI is false")
+	}
+
+	if err := runHook(msgFile, "", deps); err != nil {
+		t.Fatalf("runHook returned error: %v", err)
+	}
+
+	got, _ := os.ReadFile(msgFile)
+	if string(got) != "feat: plain message\n" {
+		t.Errorf("message file = %q, want v1-style plain write", got)
+	}
+}
+
+func TestRunHook_TUIAcceptedWritesFinalMessage(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	os.WriteFile(msgFile, []byte(""), 0o644)
+
+	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, &fakeClient{message: "feat: draft message"})
+	deps.IsTTY = func() bool { return true }
+	deps.Config = func() (config.Config, error) {
+		return config.Config{Provider: "groq", Model: "m", TimeoutMS: 2500, APIKey: "k", TUI: true}, nil
+	}
+	deps.RunTUI = func(initial string, regen func() (string, error)) (string, bool, error) {
+		if initial != "feat: draft message" {
+			t.Errorf("TUI got initial = %q, want %q", initial, "feat: draft message")
+		}
+		return "feat: edited in TUI", true, nil
+	}
+
+	if err := runHook(msgFile, "", deps); err != nil {
+		t.Fatalf("runHook returned error: %v", err)
+	}
+
+	got, _ := os.ReadFile(msgFile)
+	if string(got) != "feat: edited in TUI\n" {
+		t.Errorf("message file = %q, want TUI-edited message", got)
+	}
+}
+
+func TestRunHook_TUICancelledAbortsCommit(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	os.WriteFile(msgFile, []byte("original"), 0o644)
+
+	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, &fakeClient{message: "feat: draft message"})
+	deps.IsTTY = func() bool { return true }
+	deps.Config = func() (config.Config, error) {
+		return config.Config{Provider: "groq", Model: "m", TimeoutMS: 2500, APIKey: "k", TUI: true}, nil
+	}
+	deps.RunTUI = func(initial string, regen func() (string, error)) (string, bool, error) {
+		return "", false, nil
+	}
+
+	err := runHook(msgFile, "", deps)
+	if err == nil {
+		t.Fatal("expected runHook to return an error when the TUI is cancelled")
+	}
+
+	got, _ := os.ReadFile(msgFile)
+	if string(got) != "original" {
+		t.Errorf("message file = %q, want untouched", got)
+	}
+}
+
+func TestRunHook_TUIErrorFallsBackToPlainWrite(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	os.WriteFile(msgFile, []byte(""), 0o644)
+
+	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, &fakeClient{message: "feat: draft message"})
+	deps.IsTTY = func() bool { return true }
+	deps.Config = func() (config.Config, error) {
+		return config.Config{Provider: "groq", Model: "m", TimeoutMS: 2500, APIKey: "k", TUI: true}, nil
+	}
+	deps.RunTUI = func(initial string, regen func() (string, error)) (string, bool, error) {
+		return "", false, errTUIBroken
+	}
+
+	if err := runHook(msgFile, "", deps); err != nil {
+		t.Fatalf("runHook returned error: %v, want nil (TUI failure falls back, doesn't abort)", err)
+	}
+
+	got, _ := os.ReadFile(msgFile)
+	if string(got) != "feat: draft message\n" {
+		t.Errorf("message file = %q, want the pre-TUI message written straight through", got)
+	}
+}
+
+var errTUIBroken = errors.New("tui: program failed to start")
+
+func TestRunHook_TUIRegenerateSuccessCallsLLMAgain(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	os.WriteFile(msgFile, []byte(""), 0o644)
+
+	client := &fakeClient{messages: []string{"feat: first draft", "feat: second draft"}}
+	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, client)
+	deps.IsTTY = func() bool { return true }
+	deps.Config = func() (config.Config, error) {
+		return config.Config{Provider: "groq", Model: "m", TimeoutMS: 2500, APIKey: "k", TUI: true}, nil
+	}
+
+	var gotRegenErr error
+	deps.RunTUI = func(initial string, regen func() (string, error)) (string, bool, error) {
+		text, err := regen()
+		gotRegenErr = err
+		return text, true, nil
+	}
+
+	if err := runHook(msgFile, "", deps); err != nil {
+		t.Fatalf("runHook returned error: %v", err)
+	}
+	if gotRegenErr != nil {
+		t.Fatalf("regen returned error: %v", gotRegenErr)
+	}
+
+	got, _ := os.ReadFile(msgFile)
+	if string(got) != "feat: second draft\n" {
+		t.Errorf("message file = %q, want the regenerated (second) message", got)
+	}
+}
+
+func TestRunHook_TUIRegenerateErrorReturnsFallbackText(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	os.WriteFile(msgFile, []byte(""), 0o644)
+
+	client := &fakeClient{message: "feat: first draft"}
+	deps := testDeps(diff.Stats{FilesChanged: 2, Insertions: 5, Deletions: 1}, client)
+	deps.IsTTY = func() bool { return true }
+	deps.Config = func() (config.Config, error) {
+		return config.Config{Provider: "groq", Model: "m", TimeoutMS: 2500, APIKey: "k", TUI: true}, nil
+	}
+
+	var gotRegenErr error
+	deps.RunTUI = func(initial string, regen func() (string, error)) (string, bool, error) {
+		client.err = context.DeadlineExceeded
+		text, err := regen()
+		gotRegenErr = err
+		return text, true, nil
+	}
+
+	if err := runHook(msgFile, "", deps); err != nil {
+		t.Fatalf("runHook returned error: %v", err)
+	}
+	if gotRegenErr == nil {
+		t.Fatal("expected regen to return an error")
+	}
+
+	got, _ := os.ReadFile(msgFile)
+	if string(got) != "chore: update 2 file(s) (+5/-1)\n" {
+		t.Errorf("message file = %q, want the fallback message", got)
+	}
+}

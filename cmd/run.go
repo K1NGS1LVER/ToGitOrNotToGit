@@ -10,6 +10,8 @@ import (
 	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/diff"
 	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/llm"
 	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/severity"
+	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/tui"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 )
 
@@ -22,6 +24,8 @@ type hookDeps struct {
 	Config    func() (config.Config, error)
 	Diff      func() (diff.Stats, string, error)
 	NewClient func(cfg config.Config) llm.Client
+	IsTTY     func() bool
+	RunTUI    func(initial string, regen func() (string, error)) (string, bool, error)
 }
 
 func defaultDeps() hookDeps {
@@ -31,6 +35,10 @@ func defaultDeps() hookDeps {
 		NewClient: func(cfg config.Config) llm.Client {
 			return llm.NewGroqClient(cfg.APIKey, cfg.Model)
 		},
+		IsTTY: func() bool {
+			return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
+		},
+		RunTUI: tui.Run,
 	}
 }
 
@@ -71,16 +79,42 @@ func runHook(msgFile, source string, deps hookDeps) error {
 	tier := severity.Score(stats)
 	client := deps.NewClient(cfg)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutMS)*time.Millisecond)
-	defer cancel()
-
-	message, err := client.Generate(ctx, llm.Request{
+	req := llm.Request{
 		Persona: tier.Persona(),
 		Stats:   fmt.Sprintf("%d file(s), +%d/-%d", stats.FilesChanged, stats.Insertions, stats.Deletions),
 		Diff:    rawDiff,
-	})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutMS)*time.Millisecond)
+	defer cancel()
+
+	message, err := client.Generate(ctx, req)
 	if err != nil {
 		message = stats.FallbackMessage()
+	}
+
+	// cfg.TUI is checked before deps.IsTTY() (not the other order) so that
+	// hookDeps literals which leave IsTTY nil - as the non-TUI integration
+	// tests do - never invoke it when the config has TUI turned off.
+	if cfg.TUI && deps.IsTTY() {
+		regen := func() (string, error) {
+			rctx, rcancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutMS)*time.Millisecond)
+			defer rcancel()
+			msg, err := client.Generate(rctx, req)
+			if err != nil {
+				return stats.FallbackMessage(), err
+			}
+			return msg, nil
+		}
+
+		final, accepted, err := deps.RunTUI(message, regen)
+		if err != nil {
+			return os.WriteFile(msgFile, []byte(message+"\n"), 0o644)
+		}
+		if !accepted {
+			return fmt.Errorf("commit cancelled")
+		}
+		message = final
 	}
 
 	return os.WriteFile(msgFile, []byte(message+"\n"), 0o644)
