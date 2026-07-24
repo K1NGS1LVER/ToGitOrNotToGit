@@ -58,3 +58,44 @@ func TestLoadFrom_ReadsAPIKeyFromEnv(t *testing.T) {
 		t.Errorf("APIKey = %q, want test-key-123", cfg.APIKey)
 	}
 }
+
+func TestDefault_TUIEnabledByDefault(t *testing.T) {
+	cfg := Default()
+	if !cfg.TUI {
+		t.Errorf("Default().TUI = false, want true")
+	}
+}
+
+func TestLoadFrom_TUIFieldParsed(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	yamlContent := "provider: groq\nmodel: llama-3.3-70b-versatile\ntimeout_ms: 2500\ntui: false\n"
+	if err := os.WriteFile(path, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom returned error: %v", err)
+	}
+	if cfg.TUI {
+		t.Errorf("cfg.TUI = true, want false (from YAML)")
+	}
+}
+
+func TestLoadFrom_MissingTUIFieldDefaultsTrue(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	yamlContent := "provider: groq\nmodel: llama-3.3-70b-versatile\n"
+	if err := os.WriteFile(path, []byte(yamlContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadFrom(path)
+	if err != nil {
+		t.Fatalf("LoadFrom returned error: %v", err)
+	}
+	if !cfg.TUI {
+		t.Errorf("cfg.TUI = false, want true (default preserved when YAML omits the field)")
+	}
+}

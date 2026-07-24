@@ -12,6 +12,7 @@ type Config struct {
 	Provider  string `yaml:"provider"`
 	Model     string `yaml:"model"`
 	TimeoutMS int    `yaml:"timeout_ms"`
+	TUI       bool   `yaml:"tui"`
 	APIKey    string `yaml:"-"`
 }
 
@@ -20,6 +21,7 @@ func Default() Config {
 		Provider:  "groq",
 		Model:     "llama-3.3-70b-versatile",
 		TimeoutMS: 2500,
+		TUI:       true,
 	}
 }
 
