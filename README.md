@@ -7,7 +7,8 @@
 ## How it works
 
 On `git commit`, the installed hook runs `tocommit run` before the editor opens.
-It reads `git diff --cached`, scores the change's severity, asks Groq for a persona-appropriate conventional-commit message, and pre-fills the commit editor with it.
+It reads `git diff --cached`, scores the change's severity, and asks Groq for a persona-appropriate conventional-commit message.
+On a real terminal, that message opens in an interactive preview screen (see Commit preview, below) before it ever reaches git's editor; otherwise it's written straight in, like v1.
 If Groq errors or times out, it silently falls back to a plain deterministic message — you are never blocked waiting on the network.
 
 ### Severity tiers
@@ -67,16 +68,40 @@ git add .
 git commit
 ```
 
-Don't pass `-m` — that bypasses generation by design (see Bypass, above). Let the editor open; it'll already have the generated message. Edit or accept it like any normal commit message.
+Don't pass `-m` — that bypasses generation by design (see Bypass, above). If you're on a real terminal and haven't disabled it (see Commit preview, below), a preview screen opens with the generated message. Otherwise the message goes straight into the editor like v1 — edit or accept it like any normal commit message.
+
+## Commit preview
+
+On an interactive `git commit` (a real terminal, `tui: true` in config, which is the default), instead of handing the message straight to git's editor, tocommit shows it in a preview screen first:
+
+| Key | Action |
+|---|---|
+| `enter` | Accept the message as-is |
+| `e` | Edit — opens the message in a text box (`ctrl+s` saves, `esc` discards the edit) |
+| `r` | Regenerate — calls Groq again (spends another API call, respects the same timeout) |
+| `q` / `ctrl+c` | Cancel — aborts the commit, nothing is written |
+
+If Groq fails during a regenerate, the screen falls back to the plain deterministic message and keeps you in control (accept/edit/cancel still work) — the same never-block-you philosophy as the base pipeline.
+
+Skipped automatically when stdin/stdout isn't a real terminal (scripts, CI) — v1's plain "write straight to the file" behavior kicks in instead, unchanged. Turn it off entirely with `tui: false` in config.
+
+## Config wizard
+
+```bash
+tocommit config
+```
+
+Interactively edit `~/.config/tocommit/config.yaml` — walks through `provider`, `model`, `timeout_ms`, and `tui`, then saves. Equivalent to hand-editing the YAML below; never touches `GROQ_API_KEY`.
 
 ## Configuration (optional)
 
-Defaults work with nothing but `GROQ_API_KEY` set. To override, create `~/.config/tocommit/config.yaml`:
+Defaults work with nothing but `GROQ_API_KEY` set. To override, create `~/.config/tocommit/config.yaml` by hand or via `tocommit config`:
 
 ```yaml
 provider: groq
 model: llama-3.3-70b-versatile
 timeout_ms: 2500
+tui: true
 ```
 
 | Field | Default | Notes |
@@ -84,13 +109,12 @@ timeout_ms: 2500
 | `provider` | `groq` | Only `groq` is implemented in v1. |
 | `model` | `llama-3.3-70b-versatile` | Any Groq-hosted chat model. |
 | `timeout_ms` | `2500` | How long to wait for Groq before falling back. No retries. |
+| `tui` | `true` | Show the commit-preview screen on an interactive commit. Set `false` for v1's plain behavior. |
 
 `GROQ_API_KEY` is always read from the environment, never from this file.
 
 ## What's not built yet
 
-- No interactive config wizard (`tocommit config`) — edit the YAML by hand
-- No commit-preview / regenerate-before-commit TUI — the message goes straight into the editor
 - No local/offline LLM support (Ollama) — Groq only
 - No retry logic on transient LLM failures — one attempt, then fallback
 
@@ -99,12 +123,14 @@ timeout_ms: 2500
 ```
 cmd/tocommit/main.go      entrypoint (go install ./cmd/tocommit)
 cmd/root.go               Cobra root command
-cmd/run.go                the hook: diff -> severity -> LLM -> fallback -> write
+cmd/run.go                the hook: diff -> severity -> LLM -> fallback -> preview -> write
 cmd/install.go            install/uninstall the git hook
+cmd/config.go             tocommit config wizard
 internal/config/          YAML + env config loading
 internal/diff/            git diff exec, numstat parsing, fallback message
 internal/severity/        line-count + core-file severity scoring
 internal/llm/             LLM Client interface + Groq implementation
+internal/tui/             commit-preview screen (accept/edit/regenerate/cancel)
 ```
 
 Design spec and implementation plan: [`docs/superpowers/`](docs/superpowers/).
