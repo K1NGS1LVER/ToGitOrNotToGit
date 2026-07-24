@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -69,18 +70,33 @@ func TestUpdate_EEntersEditingWithCurrentMessage(t *testing.T) {
 	}
 }
 
-func TestUpdate_EnterInEditingSavesText(t *testing.T) {
+func TestUpdate_CtrlSInEditingSavesText(t *testing.T) {
 	m := newModel("feat: original", func() (string, error) { return "", nil })
 	m.state = stateEditing
 	m.textarea.SetValue("feat: edited by hand")
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
 	m2 := updated.(model)
 	if m2.state != stateShowing {
-		t.Errorf("state = %v, want stateShowing after enter in editing", m2.state)
+		t.Errorf("state = %v, want stateShowing after ctrl+s in editing", m2.state)
 	}
 	if m2.message != "feat: edited by hand" {
 		t.Errorf("message = %q, want %q", m2.message, "feat: edited by hand")
+	}
+}
+
+func TestUpdate_EnterInEditingInsertsNewline(t *testing.T) {
+	m := newModel("feat: original", func() (string, error) { return "", nil })
+	m.state = stateEditing
+	m.textarea.SetValue("feat: original")
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m2 := updated.(model)
+	if m2.state != stateEditing {
+		t.Errorf("state = %v, want to stay stateEditing after enter (should insert newline, not save)", m2.state)
+	}
+	if !strings.Contains(m2.textarea.Value(), "\n") {
+		t.Errorf("textarea value = %q, want it to contain a newline after enter", m2.textarea.Value())
 	}
 }
 

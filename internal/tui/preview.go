@@ -81,7 +81,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case stateEditing:
 			switch msg.Type {
-			case tea.KeyEnter:
+			case tea.KeyCtrlS:
 				m.message = m.textarea.Value()
 				m.state = stateShowing
 				return m, nil
@@ -117,7 +117,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) View() string {
 	switch m.state {
 	case stateEditing:
-		return m.textarea.View() + "\n[enter] save  [esc] discard\n"
+		return m.textarea.View() + "\n[ctrl+s] save  [esc] discard\n"
 	case stateRegenerating:
 		return m.spinner.View() + " regenerating...\n"
 	default:
