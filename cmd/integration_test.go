@@ -55,7 +55,7 @@ func TestIntegration_RunHook_EndToEnd_Success(t *testing.T) {
 		},
 	}
 
-	if err := runHook(msgFile, "", deps); err != nil {
+	if err := runHook(msgFile, "", "", deps); err != nil {
 		t.Fatalf("runHook returned error: %v", err)
 	}
 
@@ -84,7 +84,7 @@ func TestIntegration_RunHook_EndToEnd_FallsBackOnLLMError(t *testing.T) {
 		},
 	}
 
-	if err := runHook(msgFile, "", deps); err != nil {
+	if err := runHook(msgFile, "", "", deps); err != nil {
 		t.Fatalf("runHook returned error: %v", err)
 	}
 

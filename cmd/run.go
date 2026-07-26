@@ -15,6 +15,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var validPersonas = map[string]bool{
+	"victorian-gothic":      true,
+	"soap-opera":            true,
+	"shakespearean-tragedy": true,
+}
+
+func validatePersona(name string) error {
+	if name != "" && !validPersonas[name] {
+		return fmt.Errorf("unknown persona %q; valid: victorian-gothic, soap-opera, shakespearean-tragedy", name)
+	}
+	return nil
+}
+
 var bypassSources = map[string]bool{
 	"message": true,
 	"commit":  true,
@@ -42,23 +55,29 @@ func defaultDeps() hookDeps {
 	}
 }
 
-func init() {
-	rootCmd.AddCommand(runCmd)
-}
+var persona string
 
 var runCmd = &cobra.Command{
 	Use:  "run <commit-msg-file> [source] [sha]",
 	Args: cobra.RangeArgs(1, 3),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := validatePersona(persona); err != nil {
+			return err
+		}
 		source := ""
 		if len(args) > 1 {
 			source = args[1]
 		}
-		return runHook(args[0], source, defaultDeps())
+		return runHook(args[0], source, persona, defaultDeps())
 	},
 }
 
-func runHook(msgFile, source string, deps hookDeps) error {
+func init() {
+	rootCmd.AddCommand(runCmd)
+	runCmd.Flags().StringVar(&persona, "persona", "", "override auto-detected persona (victorian-gothic, soap-opera, shakespearean-tragedy)")
+}
+
+func runHook(msgFile, source, persona string, deps hookDeps) error {
 	if bypassSources[source] {
 		return nil
 	}
@@ -77,10 +96,14 @@ func runHook(msgFile, source string, deps hookDeps) error {
 	}
 
 	tier := severity.Score(stats)
+	resolvedPersona := persona
+	if resolvedPersona == "" {
+		resolvedPersona = tier.Persona()
+	}
 	client := deps.NewClient(cfg)
 
 	req := llm.Request{
-		Persona: tier.Persona(),
+		Persona: resolvedPersona,
 		Stats:   fmt.Sprintf("%d file(s), +%d/-%d", stats.FilesChanged, stats.Insertions, stats.Deletions),
 		Diff:    rawDiff,
 	}
