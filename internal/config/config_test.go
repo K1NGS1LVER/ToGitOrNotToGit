@@ -8,6 +8,9 @@ import (
 
 func TestDefault(t *testing.T) {
 	cfg := Default()
+	if cfg.Persona != "" {
+		t.Errorf("Persona = %q, want empty", cfg.Persona)
+	}
 	if cfg.Provider != "groq" {
 		t.Errorf("Provider = %q, want groq", cfg.Provider)
 	}

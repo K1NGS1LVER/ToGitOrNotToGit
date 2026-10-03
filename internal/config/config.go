@@ -13,6 +13,7 @@ type Config struct {
 	Model     string `yaml:"model"`
 	TimeoutMS int    `yaml:"timeout_ms"`
 	TUI       bool   `yaml:"tui"`
+	Persona   string `yaml:"persona"`
 	APIKey    string `yaml:"-"`
 }
 

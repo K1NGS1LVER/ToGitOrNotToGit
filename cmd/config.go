@@ -42,8 +42,9 @@ var configCmd = &cobra.Command{
 					}
 					return nil
 				}),
-				huh.NewConfirm().Title("Enable interactive commit preview (TUI)?").Value(&cfg.TUI),
-			),
+			huh.NewConfirm().Title("Enable interactive commit preview (TUI)?").Value(&cfg.TUI),
+			huh.NewInput().Title("Persona (empty = auto)").Value(&cfg.Persona),
+		),
 		)
 
 		if err := form.Run(); err != nil {
