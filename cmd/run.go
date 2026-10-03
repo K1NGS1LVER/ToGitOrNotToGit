@@ -29,8 +29,10 @@ func validatePersona(name string) error {
 }
 
 var bypassSources = map[string]bool{
-	"message": true,
-	"commit":  true,
+	"message":  true,
+	"commit":   true,
+	"merge":    true,
+	"squash":   true,
 }
 
 type hookDeps struct {

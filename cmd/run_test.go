@@ -69,6 +69,40 @@ func TestRunHook_BypassOnMessageSource(t *testing.T) {
 	}
 }
 
+func TestRunHook_BypassOnMergeSource(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	if err := os.WriteFile(msgFile, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runHook(msgFile, "merge", "", testDeps(diff.Stats{FilesChanged: 1}, &fakeClient{message: "should not be used"})); err != nil {
+		t.Fatalf("runHook returned error: %v", err)
+	}
+
+	got, _ := os.ReadFile(msgFile)
+	if string(got) != "original" {
+		t.Errorf("message file = %q, want untouched", got)
+	}
+}
+
+func TestRunHook_BypassOnSquashSource(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	if err := os.WriteFile(msgFile, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runHook(msgFile, "squash", "", testDeps(diff.Stats{FilesChanged: 1}, &fakeClient{message: "should not be used"})); err != nil {
+		t.Fatalf("runHook returned error: %v", err)
+	}
+
+	got, _ := os.ReadFile(msgFile)
+	if string(got) != "original" {
+		t.Errorf("message file = %q, want untouched", got)
+	}
+}
+
 func TestRunHook_BypassOnCommitSource(t *testing.T) {
 	dir := t.TempDir()
 	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
