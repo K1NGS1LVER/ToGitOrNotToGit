@@ -53,6 +53,28 @@ func systemPrompt(persona string) string {
 	)
 }
 
+func validateMessage(msg string) error {
+	if msg == "" {
+		return errors.New("message must not be empty")
+	}
+
+	rest := strings.TrimLeft(msg, " \t")
+	if !strings.Contains(rest, ":") {
+		return fmt.Errorf("message %q is missing the required 'type(scope): summary' prefix", msg)
+	}
+	typ := strings.TrimSpace(strings.SplitN(rest, ":", 2)[0])
+	if typ == "" {
+		return fmt.Errorf("message %q has an empty type", msg)
+	}
+	if len(rest) > 0 {
+		summary := strings.TrimSpace(rest[len(typ)+1:])
+		if summary == "" {
+			return fmt.Errorf("message %q has an empty summary after the colon", msg)
+		}
+	}
+	return nil
+}
+
 func (c *GroqClient) Generate(ctx context.Context, req Request) (string, error) {
 	if c.APIKey == "" {
 		return "", errors.New("groq: missing API key")
@@ -97,5 +119,9 @@ func (c *GroqClient) Generate(ctx context.Context, req Request) (string, error) 
 		return "", errors.New("groq: empty response")
 	}
 
-	return strings.TrimSpace(parsed.Choices[0].Message.Content), nil
+	raw := strings.TrimSpace(parsed.Choices[0].Message.Content)
+	if err := validateMessage(raw); err != nil {
+		return "", fmt.Errorf("groq: invalid commit message: %w", err)
+	}
+	return raw, nil
 }
