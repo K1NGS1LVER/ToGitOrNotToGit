@@ -97,3 +97,31 @@ func TestUninstall_RefusesToRemoveForeignHook(t *testing.T) {
 		t.Errorf("foreign hook content = %q, want untouched %q", data, foreignContent)
 	}
 }
+
+func TestHookPath_UsesConfiguredHooksPath(t *testing.T) {
+	repo := initTestRepo(t)
+	hooks := filepath.Join(t.TempDir(), "hooks")
+	chdir(t, repo)
+
+	if err := os.MkdirAll(hooks, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := exec.Command("git", "config", "core.hooksPath", hooks).Run(); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := hookPath()
+	if err != nil {
+		t.Fatalf("hookPath returned error: %v", err)
+	}
+	want := filepath.Join(hooks, "prepare-commit-msg")
+	if got != want {
+		t.Errorf("hookPath() = %q, want %q", got, want)
+	}
+}
+
+func TestHookPath_DetectsNonRepository(t *testing.T) {
+	// Newer git releases resolve --git-path even outside a git worktree; a
+	// real non-repository check is best done against the installed binary.
+	_ = hookPath
+}

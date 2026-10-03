@@ -73,10 +73,10 @@ var uninstallCmd = &cobra.Command{
 }
 
 func hookPath() (string, error) {
-	out, err := exec.Command("git", "rev-parse", "--git-dir").Output()
+	out, err := exec.Command("git", "rev-parse", "--git-path", "hooks").Output()
 	if err != nil {
 		return "", fmt.Errorf("not a git repository (or any of the parent directories)")
 	}
-	gitDir := strings.TrimSpace(string(out))
-	return filepath.Join(gitDir, "hooks", "prepare-commit-msg"), nil
+	gitPath := strings.TrimSpace(string(out))
+	return filepath.Join(gitPath, "prepare-commit-msg"), nil
 }
