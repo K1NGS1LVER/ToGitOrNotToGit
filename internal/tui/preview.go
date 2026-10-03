@@ -100,6 +100,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	case regenResultMsg:
+		// If regeneration failed (err != nil), keep the previous usable
+		// message; the displayed text may be a fallback, but we never lose
+		// the draft the user approved.
+		if msg.err != nil && m.message != "" {
+			m.state = stateShowing
+			return m, nil
+		}
 		m.message = msg.text
 		m.err = msg.err
 		m.state = stateShowing

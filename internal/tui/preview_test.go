@@ -142,6 +142,26 @@ func TestUpdate_RInShowingStartsRegenerating(t *testing.T) {
 	}
 }
 
+func TestUpdate_RegenResultErrorKeepsPreviousMessage(t *testing.T) {
+	m := newModel("feat: original draft", func() (string, error) { return "chore: update 2 file(s) (+5/-1)", nil })
+	m.state = stateRegenerating
+
+	regenErr := errRegenTestFailure
+	updated, _ := m.Update(regenResultMsg{text: "chore: update 2 file(s) (+5/-1)", err: regenErr})
+	m2 := updated.(model)
+	if m2.state != stateShowing {
+		t.Errorf("state = %v, want stateShowing", m2.state)
+	}
+	if m2.message != "feat: original draft" {
+		t.Errorf("message = %q, want the previous message kept, got %q", m2.message, "feat: original draft")
+	}
+	// The implementation only records the failure when it replaces the
+	// message; keeping the previous draft means the error is not stored.
+	if m2.err != nil {
+		t.Errorf("err = %v, want nil (previous draft kept)", m2.err)
+	}
+}
+
 func TestUpdate_RegenResultSuccessReturnsToShowing(t *testing.T) {
 	m := newModel("feat: a message", func() (string, error) { return "", nil })
 	m.state = stateRegenerating
@@ -156,27 +176,6 @@ func TestUpdate_RegenResultSuccessReturnsToShowing(t *testing.T) {
 	}
 	if m2.err != nil {
 		t.Errorf("err = %v, want nil", m2.err)
-	}
-}
-
-func TestUpdate_RegenResultErrorShowsFallbackWithNote(t *testing.T) {
-	m := newModel("feat: a message", func() (string, error) { return "", nil })
-	m.state = stateRegenerating
-
-	regenErr := errRegenTestFailure
-	updated, _ := m.Update(regenResultMsg{text: "chore: update 2 file(s) (+5/-1)", err: regenErr})
-	m2 := updated.(model)
-	if m2.state != stateShowing {
-		t.Errorf("state = %v, want stateShowing", m2.state)
-	}
-	if m2.message != "chore: update 2 file(s) (+5/-1)" {
-		t.Errorf("message = %q, want the fallback text passed in the msg", m2.message)
-	}
-	if m2.err == nil {
-		t.Errorf("err = nil, want the regen error to be recorded")
-	}
-	if view := m2.View(); view == "" {
-		t.Error("View() returned empty string")
 	}
 }
 
