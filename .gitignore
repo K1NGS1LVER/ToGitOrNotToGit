@@ -30,3 +30,6 @@ docs/*
 
 # Local git worktrees
 .worktrees/
+# Agent harness directories
+.opencode/
+.superpowers/

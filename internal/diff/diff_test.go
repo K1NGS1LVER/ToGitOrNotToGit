@@ -1,6 +1,9 @@
 package diff
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseNumstat(t *testing.T) {
 	tests := []struct {
@@ -80,5 +83,14 @@ func TestStats_TotalLines(t *testing.T) {
 	s := Stats{Insertions: 7, Deletions: 3}
 	if s.TotalLines() != 10 {
 		t.Errorf("TotalLines() = %d, want 10", s.TotalLines())
+	}
+}
+
+func TestParseNumstat_RetainsChangedFilesUnderTruncation(t *testing.T) {
+	numstat := "10000\t0\tlarge.go\n3\t1\ta.go\n5\t0\tb.go\n"
+	diff := strings.Repeat("x", 10000) + "\n" + numstat
+	_, err := parseNumstat(diff)
+	if err == nil {
+		t.Fatal("parseNumstat returned nil error, want an error for the truncated line")
 	}
 }
