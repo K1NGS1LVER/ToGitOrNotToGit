@@ -1,136 +1,165 @@
-# 🎭 ToGitOrNotToGit
+# 🎭 ToGitOrNotToGit (`tocommit`)
 
-> _"Out, damn bug! Out, I say!"_
+[![Go Version](https://img.shields.io/github/go-mod/go-version/K1NGS1LVER/ToGitOrNotToGit?style=flat-square&color=00ADD8)](https://go.dev)
+[![License](https://img.shields.io/github/license/K1NGS1LVER/ToGitOrNotToGit?style=flat-square&color=blue)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/K1NGS1LVER/ToGitOrNotToGit?style=flat-square&color=green)](https://github.com/K1NGS1LVER/ToGitOrNotToGit/releases)
 
-**ToGitOrNotToGit** (binary name `tocommit`) is a local Git hook CLI tool that inspects your staged changes and asks an LLM to write your commit message as a theatrical monologue instead of `fix typo` or `updated config`.
+> _"Out, damn bug! Out, I say!"_ — **Macbeth (Act V, Scene I), adapted for Git**
 
-## How it works
+**ToGitOrNotToGit** (binary name: `tocommit`) is a Git hook CLI that inspects your staged changes and uses AI to generate theatrical, dramatic commit messages based on the severity of your code changes. 
 
-On `git commit`, the installed hook runs `tocommit run` before the editor opens.
-It reads `git diff --cached`, scores the change's severity, and asks Groq for a persona-appropriate conventional-commit message.
-On a real terminal, that message opens in an interactive preview screen (see Commit preview, below) before it ever reaches git's editor; otherwise it's written straight in, like v1.
-If Groq errors or times out, it silently falls back to a plain deterministic message — you are never blocked waiting on the network.
+Transform boring commit messages like `fix typo` or `updated config` into Victorian Gothic laments, Soap Opera betrayals, and Shakespearean Tragedies — right inside your terminal workflow.
 
-### Severity tiers
+---
 
-Based on total changed lines (`insertions + deletions`), unless a core file is touched:
+## 🚀 Key Features
 
-| Tier | Trigger | Persona |
-|---|---|---|
-| Minor | < 10 lines | Victorian Gothic |
-| Medium | 10-100 lines | Soap Opera |
-| Catastrophic | > 100 lines, **or** any changed file matches `go.mod`, `go.sum`, `Dockerfile`, `Makefile`, or `.github/workflows/*` | Shakespearean Tragedy |
+- 🎭 **Theatrical Persona Escalation**: Automatically assigns a persona (*Victorian Gothic*, *Soap Opera*, or *Shakespearean Tragedy*) based on diff line counts and sensitive file changes (`go.mod`, `Dockerfile`, `.github/workflows/*`).
+- 🖥️ **Interactive Terminal Preview (TUI)**: Review, edit (`e`), regenerate (`r`), or accept (`enter`) generated commit messages interactively before committing.
+- ⚡ **Zero-Block Fallback System**: If network requests fail, timeout (default `2500ms`), or an API key is missing, `tocommit` instantly generates a clean conventional fallback commit without blocking your git flow.
+- 🛡️ **Zero-Leak Security**: `GROQ_API_KEY` is read strictly from environment variables and is **never written to config files or disk**.
+- 🛠️ **Smart Bypass**: Automatically skips execution for automated commits (`-m`, `-F`, `--amend`, `merge`, `squash`) to preserve git integrity.
 
-### Fallback
+---
 
-If the Groq call errors, times out, or `GROQ_API_KEY` isn't set, the hook writes a plain message instead of blocking your commit:
-```
-chore: update 2 file(s) (+15/-3)
-```
+## ⚡ Quick Start
 
-### Bypass
+### 1. Installation
 
-The hook skips itself entirely (exits without touching the message) when Git invokes it for `-m`/`-F` or `--amend`/`-c`/`-C` — it only fires for a normal interactive `git commit`.
+Requires **Go 1.22+**. Install the binary directly:
 
-## Install
-
-Requires Go 1.22+ and a [Groq](https://console.groq.com) API key.
-
-```bash
-go install ./cmd/tocommit
+```zsh
+go install github.com/K1NGS1LVER/ToGitOrNotToGit/cmd/tocommit@latest
 ```
 
-This installs a `tocommit` binary to `$(go env GOPATH)/bin` — make sure that's on your `PATH`.
+Ensure `$(go env GOPATH)/bin` is in your shell `PATH`.
 
-Set your API key (never stored in any config file, environment variable only):
-```bash
-export GROQ_API_KEY=gsk_your_key_here
+Alternatively, download pre-built release binaries for macOS, Linux, or Windows directly from the [Releases](https://github.com/K1NGS1LVER/ToGitOrNotToGit/releases) page.
+
+### 2. Set API Key
+
+Set your [Groq API Key](https://console.groq.com) in your environment:
+
+```zsh
+export GROQ_API_KEY="gsk_your_groq_api_key"
 ```
 
-In any git repo you want the theatrics in:
-```bash
-cd /path/to/repo
+### 3. Install the Git Hook
+
+Inside any Git repository:
+
+```zsh
 tocommit install
 ```
 
-This writes `.git/hooks/prepare-commit-msg` in that repo. It refuses to overwrite a pre-existing hook that isn't already tocommit's (checked via a marker comment), so it won't clobber a hook you already have.
+This installs `.git/hooks/prepare-commit-msg` safely without clobbering existing non-tocommit hooks.
 
-To remove it:
-```bash
+To remove the hook at any time:
+```zsh
 tocommit uninstall
 ```
 
-## Usage
+---
 
-Just commit normally:
-```bash
+## 📖 Usage & Workflow
+
+Once installed, simply stage your changes and commit as usual:
+
+```zsh
 git add .
 git commit
 ```
 
-Don't pass `-m` — that bypasses generation by design (see Bypass, above). If you're on a real terminal and haven't disabled it (see Commit preview, below), a preview screen opens with the generated message. Otherwise the message goes straight into the editor like v1 — edit or accept it like any normal commit message.
+> [!TIP]
+> Do **not** pass `-m` when committing if you want `tocommit` to generate a message. Passing `-m` or `-F` intentionally bypasses hook generation.
 
-## Commit preview
+---
 
-On an interactive `git commit` (a real terminal, `tui: true` in config, which is the default), instead of handing the message straight to git's editor, tocommit shows it in a preview screen first:
+## 🎭 Persona Tiers & Severity Scoring
 
-| Key | Action |
-|---|---|
-| `enter` | Accept the message as-is |
-| `e` | Edit — opens the message in a text box (`ctrl+s` saves, `esc` discards the edit) |
-| `r` | Regenerate — calls Groq again (spends another API call, respects the same timeout) |
-| `q` / `ctrl+c` | Cancel — aborts the commit, nothing is written |
+`tocommit` scores change severity based on line additions, deletions, and critical file paths:
 
-If Groq fails during a regenerate, the screen falls back to the plain deterministic message and keeps you in control (accept/edit/cancel still work) — the same never-block-you philosophy as the base pipeline.
+| Tier | Trigger Criteria | Persona Assigned | Example Tone |
+| :--- | :--- | :--- | :--- |
+| **Minor** | `< 10` total lines modified | **Victorian Gothic** | *Dark, melancholic, reflective lamentation* |
+| **Medium** | `10 - 100` lines modified | **Soap Opera** | *High drama, sudden betrayals, plot twists* |
+| **Catastrophic** | `> 100` lines, or touches `go.mod`, `Dockerfile`, `.github/workflows/*` | **Shakespearean Tragedy** | *Grand theatrical tragedy in iambic pentameter* |
 
-Skipped automatically when stdin/stdout isn't a real terminal (scripts, CI) — v1's plain "write straight to the file" behavior kicks in instead, unchanged. Turn it off entirely with `tui: false` in config.
+You can also explicitly override the persona when running commands:
+```zsh
+tocommit run .git/COMMIT_EDITMSG --persona soap-opera
+```
 
-## Config wizard
+---
 
-```bash
+## 🖥️ Interactive Preview (TUI)
+
+When `tui: true` (default), `tocommit` renders an interactive terminal preview screen powered by [Bubble Tea](https://github.com/charmbracelet/bubbletea):
+
+```text
+feat(auth): a tale of two tokens
+
+Alas! The OAuth flow hath been rewritten in tears and blood...
+
+[enter] accept  [e] edit  [r] regenerate  [q/ctrl+c] cancel
+```
+
+| Key | Action Description |
+| :--- | :--- |
+| `enter` | **Accept**: Writes the message to Git and proceeds to editor/commit |
+| `e` | **Edit**: Opens an interactive text area (`ctrl+s` to save, `esc` to discard) |
+| `r` | **Regenerate**: Calls Groq for a fresh alternative monologue |
+| `q` / `ctrl+c` | **Cancel**: Aborts the commit cleanly without modifying the commit file |
+
+---
+
+## ⚙️ Configuration
+
+Run the built-in interactive wizard:
+
+```zsh
 tocommit config
 ```
 
-Interactively edit `~/.config/tocommit/config.yaml` — walks through `provider`, `model`, `timeout_ms`, and `tui`, then saves. Equivalent to hand-editing the YAML below; never touches `GROQ_API_KEY`.
-
-## Configuration (optional)
-
-Defaults work with nothing but `GROQ_API_KEY` set. To override, create `~/.config/tocommit/config.yaml` by hand or via `tocommit config`:
+Or manually create/edit `~/.config/tocommit/config.yaml`:
 
 ```yaml
 provider: groq
 model: llama-3.3-70b-versatile
 timeout_ms: 2500
 tui: true
+persona: ""
 ```
 
-| Field | Default | Notes |
-|---|---|---|
-| `provider` | `groq` | Only `groq` is implemented in v1. |
-| `model` | `llama-3.3-70b-versatile` | Any Groq-hosted chat model. |
-| `timeout_ms` | `2500` | How long to wait for Groq before falling back. No retries. |
-| `tui` | `true` | Show the commit-preview screen on an interactive commit. Set `false` for v1's plain behavior. |
+| Setting | Default | Description |
+| :--- | :--- | :--- |
+| `provider` | `groq` | LLM provider (`groq` supported in v1) |
+| `model` | `llama-3.3-70b-versatile` | Model name on Groq inference platform |
+| `timeout_ms` | `2500` | Max wait time before silent fallback |
+| `tui` | `true` | Enables interactive preview screen |
+| `persona` | `""` | Optional forced default persona (empty = auto-severity) |
 
-`GROQ_API_KEY` is always read from the environment, never from this file.
+---
 
-## What's not built yet
+## 📁 Project Architecture
 
-- No local/offline LLM support (Ollama) — Groq only
-- No retry logic on transient LLM failures — one attempt, then fallback
-
-## Project layout
-
-```
-cmd/tocommit/main.go      entrypoint (go install ./cmd/tocommit)
-cmd/root.go               Cobra root command
-cmd/run.go                the hook: diff -> severity -> LLM -> fallback -> preview -> write
-cmd/install.go            install/uninstall the git hook
-cmd/config.go             tocommit config wizard
-internal/config/          YAML + env config loading
-internal/diff/            git diff exec, numstat parsing, fallback message
-internal/severity/        line-count + core-file severity scoring
-internal/llm/             LLM Client interface + Groq implementation
-internal/tui/             commit-preview screen (accept/edit/regenerate/cancel)
+```text
+cmd/
+├── tocommit/main.go   # CLI Entrypoint
+├── root.go            # Cobra root command
+├── run.go             # Main pipeline: Diff → Severity → LLM → TUI → File Write
+├── install.go         # Hook installer & path resolver (core.hooksPath support)
+└── config.go          # Interactive configuration wizard
+internal/
+├── config/            # YAML config parser & environment loader
+├── diff/              # Git diff collector & numstat parser
+├── llm/               # LLM client interface, Groq adapter & message validator
+├── severity/          # Severity scoring engine & persona resolver
+└── tui/               # Bubble Tea terminal preview UI
 ```
 
-Design spec and implementation plan: [`docs/superpowers/`](docs/superpowers/).
+---
+
+## 📄 License
+
+Distributed under the MIT License. See `LICENSE` for details.
