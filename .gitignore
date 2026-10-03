@@ -33,3 +33,4 @@ docs/*
 # Agent harness directories
 .opencode/
 .superpowers/
+CLAUDE.md
