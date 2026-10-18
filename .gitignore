@@ -22,7 +22,6 @@ tocommit.exe
 .DS_Store
 .idea/
 .vscode/
-docs/*
 
 # Local testing repos
 /test-sandbox/
@@ -31,6 +30,8 @@ docs/*
 # Local git worktrees
 .worktrees/
 # Agent harness directories
+.commandcode/
 .opencode/
 .superpowers/
+docs/superpowers/
 CLAUDE.md
