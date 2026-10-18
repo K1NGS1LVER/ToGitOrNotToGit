@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/config"
@@ -15,24 +16,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var validPersonas = map[string]bool{
-	"victorian-gothic":      true,
-	"soap-opera":            true,
-	"shakespearean-tragedy": true,
-}
-
 func validatePersona(name string) error {
-	if name != "" && !validPersonas[name] {
-		return fmt.Errorf("unknown persona %q; valid: victorian-gothic, soap-opera, shakespearean-tragedy", name)
+	if name != "" && !severity.IsValidPersona(name) {
+		return fmt.Errorf("unknown persona %q; valid: %s", name, strings.Join(severity.ValidPersonas(), ", "))
 	}
 	return nil
 }
 
 var bypassSources = map[string]bool{
-	"message":  true,
-	"commit":   true,
-	"merge":    true,
-	"squash":   true,
+	"message": true,
+	"commit":  true,
+	"merge":   true,
+	"squash":  true,
 }
 
 type hookDeps struct {
@@ -97,7 +92,7 @@ func runHook(msgFile, source, persona string, deps hookDeps) error {
 		return fmt.Errorf("loading config: %w", err)
 	}
 
-	tier := severity.Score(stats)
+	tier := severity.Score(stats, nil)
 	resolvedPersona := persona
 	if resolvedPersona == "" {
 		resolvedPersona = tier.Persona()

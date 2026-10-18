@@ -22,7 +22,7 @@ func TestScore_LineCountTiers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			stats := diff.Stats{Insertions: tt.insertions, Deletions: tt.deletions}
-			if got := Score(stats); got != tt.want {
+			if got := Score(stats, nil); got != tt.want {
 				t.Errorf("Score(%+v) = %v, want %v", stats, got, tt.want)
 			}
 		})
@@ -34,10 +34,48 @@ func TestScore_CoreFileOverride(t *testing.T) {
 	for _, f := range tests {
 		t.Run(f, func(t *testing.T) {
 			stats := diff.Stats{Insertions: 1, Deletions: 0, ChangedFiles: []string{f}}
-			if got := Score(stats); got != Catastrophic {
+			if got := Score(stats, nil); got != Catastrophic {
 				t.Errorf("Score with changed file %q = %v, want Catastrophic", f, got)
 			}
 		})
+	}
+}
+
+func TestScore_CustomOverrides(t *testing.T) {
+	stats := diff.Stats{Insertions: 1, ChangedFiles: []string{"scripts/release.sh"}}
+	if got := Score(stats, []string{"scripts/*"}); got != Catastrophic {
+		t.Errorf("Score with glob override = %v, want Catastrophic", got)
+	}
+
+	// A non-override file with typical size stays Minor.
+	small := diff.Stats{Insertions: 1, ChangedFiles: []string{"main.go"}}
+	if got := Score(small, []string{"scripts/*"}); got != Minor {
+		t.Errorf("Score(small) = %v, want Minor", got)
+	}
+}
+
+func TestScore_OverridesReplaceDefaults(t *testing.T) {
+	// go.mod is catastrophic by default...
+	stats := diff.Stats{Insertions: 1, ChangedFiles: []string{"go.mod"}}
+	if got := Score(stats, nil); got != Catastrophic {
+		t.Fatalf("default go.mod = %v, want Catastrophic", got)
+	}
+	// ...but an explicit override list that omits it drops go.mod back to line-based scoring.
+	if got := Score(stats, []string{"Dockerfile"}); got != Minor {
+		t.Errorf("go.mod with custom overrides = %v, want Minor", got)
+	}
+}
+
+func TestIsValidPersona(t *testing.T) {
+	for _, p := range ValidPersonas() {
+		if !IsValidPersona(p) {
+			t.Errorf("IsValidPersona(%q) = false, want true", p)
+		}
+	}
+	for _, bad := range []string{"", "victorian", "Soap Opera", "unknown"} {
+		if IsValidPersona(bad) {
+			t.Errorf("IsValidPersona(%q) = true, want false", bad)
+		}
 	}
 }
 
