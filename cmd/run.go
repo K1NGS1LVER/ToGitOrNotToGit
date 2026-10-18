@@ -10,6 +10,7 @@ import (
 	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/config"
 	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/diff"
 	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/llm"
+	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/logx"
 	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/severity"
 	"github.com/K1NGS1LVER/ToGitOrNotToGit/internal/tui"
 	"github.com/mattn/go-isatty"
@@ -40,11 +41,9 @@ type hookDeps struct {
 
 func defaultDeps() hookDeps {
 	return hookDeps{
-		Config: config.Load,
-		Diff:   diff.Collect,
-		NewClient: func(cfg config.Config) llm.Client {
-			return llm.NewGroqClient(cfg.APIKey, cfg.Model)
-		},
+		Config:    config.Load,
+		Diff:      diff.Collect,
+		NewClient: llm.New,
 		IsTTY: func() bool {
 			return isatty.IsTerminal(os.Stdin.Fd()) && isatty.IsTerminal(os.Stdout.Fd())
 		},
@@ -76,6 +75,7 @@ func init() {
 
 func runHook(msgFile, source, persona string, deps hookDeps) error {
 	if bypassSources[source] {
+		logx.Debugf("bypassing generation: commit source %q", source)
 		return nil
 	}
 
@@ -84,19 +84,33 @@ func runHook(msgFile, source, persona string, deps hookDeps) error {
 		return fmt.Errorf("collecting diff: %w", err)
 	}
 	if stats.FilesChanged == 0 {
+		logx.Debugf("no staged changes; leaving the commit message untouched")
 		return nil
 	}
 
 	cfg, err := deps.Config()
 	if err != nil {
-		return fmt.Errorf("loading config: %w", err)
+		logx.Debugf("loading config failed: %v", err)
+		fmt.Fprintf(os.Stderr, "tocommit: %v; using fallback message (run 'tocommit config')\n", err)
+		return os.WriteFile(msgFile, []byte(stats.FallbackMessage()+"\n"), 0o644)
 	}
 
-	tier := severity.Score(stats, nil)
+	// A bad config must never block the commit. Warn, log, and fall back.
+	if verr := cfg.Validate(); verr != nil {
+		logx.Debugf("invalid config: %v", verr)
+		fmt.Fprintf(os.Stderr, "tocommit: %v; using fallback message (run 'tocommit config')\n", verr)
+		return os.WriteFile(msgFile, []byte(stats.FallbackMessage()+"\n"), 0o644)
+	}
+
+	tier := severity.Score(stats, cfg.SeverityOverrides)
 	resolvedPersona := persona
 	if resolvedPersona == "" {
 		resolvedPersona = tier.Persona()
 	}
+
+	logx.Debugf("provider=%s model=%s persona=%s stats=%d file(s) +%d/-%d",
+		cfg.Provider, cfg.Model, resolvedPersona, stats.FilesChanged, stats.Insertions, stats.Deletions)
+
 	client := deps.NewClient(cfg)
 
 	req := llm.Request{
@@ -110,6 +124,7 @@ func runHook(msgFile, source, persona string, deps hookDeps) error {
 
 	message, err := client.Generate(ctx, req)
 	if err != nil {
+		logx.Debugf("generation failed; using fallback message: %v", err)
 		message = stats.FallbackMessage()
 	}
 
@@ -122,6 +137,7 @@ func runHook(msgFile, source, persona string, deps hookDeps) error {
 			defer rcancel()
 			msg, err := client.Generate(rctx, req)
 			if err != nil {
+				logx.Debugf("regeneration failed; using fallback message: %v", err)
 				return stats.FallbackMessage(), err
 			}
 			return msg, nil
@@ -129,6 +145,7 @@ func runHook(msgFile, source, persona string, deps hookDeps) error {
 
 		final, accepted, err := deps.RunTUI(message, regen)
 		if err != nil {
+			logx.Debugf("TUI failed (%v); writing message straight through", err)
 			return os.WriteFile(msgFile, []byte(message+"\n"), 0o644)
 		}
 		if !accepted {
