@@ -33,6 +33,7 @@ var configCmd = &cobra.Command{
 		}
 
 		timeoutStr := strconv.Itoa(cfg.TimeoutMS)
+		fallbackStr := strings.Join(cfg.FallbackModels, ", ")
 
 		form := huh.NewForm(
 			huh.NewGroup(
@@ -46,6 +47,9 @@ var configCmd = &cobra.Command{
 					).
 					Value(&cfg.Provider),
 				huh.NewInput().Title("Model").Value(&cfg.Model).Validate(nonBlank("model")),
+				huh.NewInput().
+					Title("Fallback models (comma-separated, empty = provider defaults)").
+					Value(&fallbackStr),
 				huh.NewInput().Title("Base URL (optional, for custom endpoints)").Value(&cfg.BaseURL),
 				huh.NewInput().Title("Timeout (ms)").Value(&timeoutStr).Validate(validateTimeoutMS),
 				huh.NewConfirm().Title("Enable interactive commit preview (TUI)?").Value(&cfg.TUI),
@@ -59,6 +63,7 @@ var configCmd = &cobra.Command{
 
 		// error impossible here: the form's Validate already rejected non-numeric input
 		cfg.TimeoutMS, _ = strconv.Atoi(timeoutStr)
+		cfg.FallbackModels = splitList(fallbackStr)
 
 		if err := cfg.Validate(); err != nil {
 			return err
@@ -70,6 +75,17 @@ var configCmd = &cobra.Command{
 		fmt.Println("Saved config to", path)
 		return nil
 	},
+}
+
+// splitList parses a comma-separated form input into a trimmed, non-empty slice.
+func splitList(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func nonBlank(field string) func(string) error {

@@ -34,8 +34,13 @@ echo "package main" > main.go && git add main.go
 TOCOMMIT_DEBUG=1 git commit    # watch stderr for provider/persona/fallback reasons
 ```
 
-`TOCOMMIT_DEBUG=1` prints the chosen provider/model/persona and the reason for any
-fallback (missing key, timeout, HTTP status, invalid message, config error).
+`TOCOMMIT_DEBUG=1` prints the chosen provider/model/persona, each model the fallback
+cascade tries, and the reason for any fallback (missing key, timeout, HTTP status,
+invalid message, config error).
+
+Providers retire models, so use `tocommit models` to list the ids your key can use,
+then set `model` (or `fallback_models`) in `~/.config/tocommit/config.yaml` or via
+`tocommit config`.
 
 ## Checks CI runs
 

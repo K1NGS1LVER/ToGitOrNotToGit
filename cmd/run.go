@@ -51,6 +51,30 @@ func defaultDeps() hookDeps {
 	}
 }
 
+// warnActionableFailure prints a one-shot, actionable warning to stderr when the
+// failure is something the user can fix: a model that no longer exists on the
+// provider, or a rejected API key. Every other failure stays debug-only so the
+// hook keeps its quiet default and never spams a normal commit.
+func warnActionableFailure(cfg config.Config, err error) {
+	provider := config.ProviderLabel(cfg.Provider)
+	switch llm.KindOf(err) {
+	case llm.KindModelUnavailable:
+		fmt.Fprintf(os.Stderr,
+			"tocommit: model %q is not available on %s and no fallback model worked (%v)\n"+
+				"tocommit: run 'tocommit models' to list valid models, then 'tocommit config' to change it,\n"+
+				"tocommit: or set 'provider: ollama' in ~/.config/tocommit/config.yaml to use a local model.\n",
+			cfg.Model, provider, err)
+	case llm.KindAuth:
+		if env := config.KeyEnvVar(cfg.Provider); env != "" {
+			fmt.Fprintf(os.Stderr,
+				"tocommit: %s rejected the API key; set %s (or TOCOMMIT_API_KEY) (%v)\n",
+				provider, env, err)
+		} else {
+			fmt.Fprintf(os.Stderr, "tocommit: %s rejected the request (%v)\n", provider, err)
+		}
+	}
+}
+
 var persona string
 
 var runCmd = &cobra.Command{
@@ -125,6 +149,7 @@ func runHook(msgFile, source, persona string, deps hookDeps) error {
 	message, err := client.Generate(ctx, req)
 	if err != nil {
 		logx.Debugf("generation failed; using fallback message: %v", err)
+		warnActionableFailure(cfg, err)
 		message = stats.FallbackMessage()
 	}
 

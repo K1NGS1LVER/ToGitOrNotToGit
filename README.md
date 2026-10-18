@@ -16,7 +16,8 @@ Transform boring commit messages like `fix typo` or `updated config` into Victor
 
 - 🎭 **Theatrical Persona Escalation**: Automatically assigns a persona (*Victorian Gothic*, *Soap Opera*, or *Shakespearean Tragedy*) based on diff line counts and sensitive file changes (`go.mod`, `go.sum`, `Dockerfile`, `Makefile`, `.github/workflows/*`).
 - 🖥️ **Interactive Terminal Preview (TUI)**: Review, edit (`e`), regenerate (`r`), or accept (`enter`) generated commit messages interactively before committing.
-- ⚡ **Zero-Block Fallback System**: If network requests fail, timeout (default `2500ms`), or an API key is missing, `tocommit` instantly generates a clean conventional fallback commit without blocking your git flow.
+- ⚡ **Zero-Block Fallback System**: If the configured model is retired or unavailable, `tocommit` first cascades through your `fallback_models`, then writes a clean conventional fallback commit without ever blocking your git flow.
+- 🔔 **Explicit Model Alerts**: If every model fails, `tocommit` prints an actionable warning (naming the model and telling you to run `tocommit models` or switch to a local Ollama model) instead of failing silently.
 - 🛡️ **Zero-Leak Security**: API keys (`GROQ_API_KEY`, `OPENAI_API_KEY`, or `TOCOMMIT_API_KEY`) are read strictly from environment variables and are **never written to config files or disk**.
 - 🛠️ **Smart Bypass**: Automatically skips execution for automated commits (`-m`, `-F`, `--amend`, `merge`, `squash`) to preserve git integrity.
 - 🔌 **Multi-Provider**: Works with Groq, OpenAI, local Ollama, or any OpenAI-compatible endpoint via `base_url`.
@@ -146,7 +147,8 @@ Or manually create/edit `~/.config/tocommit/config.yaml`:
 
 ```yaml
 provider: groq
-model: llama-3.3-70b-versatile
+model: openai/gpt-oss-120b
+fallback_models: [openai/gpt-oss-20b, qwen/qwen3.8-27b]  # empty = provider defaults
 base_url: ""          # only for provider: openai-compatible
 timeout_ms: 2500
 tui: true
@@ -157,7 +159,8 @@ severity_overrides: [] # extra paths that force the Catastrophic tier
 | Setting | Default | Description |
 | :--- | :--- | :--- |
 | `provider` | `groq` | LLM provider (`groq`, `openai`, `ollama`, `openai-compatible`) |
-| `model` | `llama-3.3-70b-versatile` | Model name on the provider |
+| `model` | `openai/gpt-oss-120b` | Model name on the provider |
+| `fallback_models` | provider defaults | Models tried in order when `model` is unavailable; empty uses the built-in Groq fallbacks |
 | `base_url` | `""` | Custom endpoint; required for `provider: openai-compatible` |
 | `timeout_ms` | `2500` | Max wait time before silent fallback (1–60000) |
 | `tui` | `true` | Enables interactive preview screen |
@@ -165,6 +168,40 @@ severity_overrides: [] # extra paths that force the Catastrophic tier
 | `severity_overrides` | `[]` | Path patterns (globs, `dir/`, or basenames) that force Catastrophic; empty uses the built-in defaults |
 
 Invalid config never blocks a commit: `tocommit` prints a warning, writes a conventional fallback message, and lets git proceed. Run `tocommit config` to fix it.
+
+---
+
+## 🔁 Model Availability & Fallbacks
+
+Providers retire models, and a retired model is the most common reason a commit message comes back plain.
+
+When the configured `model` is rejected as unavailable, `tocommit` tries each entry in `fallback_models` in order before giving up.
+Only a model-not-found failure starts the cascade; a bad key, timeout, or network error fails fast and never retries other models.
+
+If every model fails, `tocommit` prints an actionable warning and still lets your commit through:
+
+```text
+tocommit: model "llama-3.3-70b-versatile" is not available on groq and no fallback model worked
+tocommit: run 'tocommit models' to list valid models, then 'tocommit config' to change it,
+tocommit: or set 'provider: ollama' in ~/.config/tocommit/config.yaml to use a local model.
+```
+
+List the model IDs your key can actually use:
+
+```zsh
+tocommit models
+```
+
+The configured model is marked with `*`.
+Copy a valid id into `model` (or `fallback_models`) with `tocommit config`.
+
+To run fully locally instead, point `tocommit` at Ollama:
+
+```yaml
+# ~/.config/tocommit/config.yaml
+provider: ollama
+model: llama3.1
+```
 
 ---
 
@@ -176,11 +213,12 @@ cmd/
 ├── root.go            # Cobra root command
 ├── run.go             # Main pipeline: Diff → Severity → LLM → TUI → File Write
 ├── install.go         # Hook installer & path resolver (core.hooksPath support)
+├── models.go          # `tocommit models`: lists the provider's model IDs
 └── config.go          # Interactive configuration wizard
 internal/
-├── config/            # YAML config parser, validation & environment loader
+├── config/            # YAML config parser, validation, model list & environment loader
 ├── diff/              # Git diff collector & numstat parser
-├── llm/               # LLM client interface, OpenAI-compatible client & message validator
+├── llm/               # LLM client, model fallback cascade, models listing, message validator
 ├── logx/              # Opt-in debug logging
 ├── severity/          # Severity scoring engine & persona resolver
 └── tui/               # Bubble Tea terminal preview UI
@@ -196,10 +234,12 @@ Enable debug logging to see what `tocommit` is doing:
 TOCOMMIT_DEBUG=1 git commit
 ```
 
-This prints the provider, model, resolved persona, and the reason for any fallback (missing API key, timeout, HTTP status, invalid commit message, or config error).
+This prints the provider, model, resolved persona, model cascade attempts, and the reason for any fallback (missing API key, timeout, HTTP status, invalid commit message, or config error).
 
 > [!NOTE]
 > When the LLM is unreachable or returns a message that isn't a valid conventional commit, `tocommit` writes a clean fallback (`chore: update N file(s) (+X/-Y)`) so your commit still goes through.
+> A retired model or a rejected API key also prints an explicit, actionable warning so you know there is something to fix.
+> In that case run `tocommit models` to see valid model ids, then `tocommit config` to update the model or provider.
 
 ---
 
