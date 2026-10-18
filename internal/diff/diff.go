@@ -40,11 +40,17 @@ func Collect() (Stats, string, error) {
 	if err != nil {
 		return Stats{}, "", fmt.Errorf("running git diff: %w", err)
 	}
-	if len(rawDiff) > maxDiffBytes {
-		rawDiff = rawDiff[:maxDiffBytes] + "\n... (truncated)"
-	}
 
-	return stats, rawDiff, nil
+	return stats, truncateDiff(rawDiff), nil
+}
+
+// truncateDiff caps the diff at maxDiffBytes, dropping any partial multi-byte
+// rune left at the cut so the payload stays valid UTF-8.
+func truncateDiff(diff string) string {
+	if len(diff) <= maxDiffBytes {
+		return diff
+	}
+	return strings.ToValidUTF8(diff[:maxDiffBytes], "") + "\n... (truncated)"
 }
 
 func parseNumstat(output string) (Stats, error) {
