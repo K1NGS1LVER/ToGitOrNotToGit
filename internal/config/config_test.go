@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -28,7 +29,7 @@ func TestLoadFrom_MissingFile_ReturnsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFrom returned error: %v", err)
 	}
-	if cfg != Default() {
+	if !reflect.DeepEqual(cfg, Default()) {
 		t.Errorf("cfg = %+v, want defaults %+v", cfg, Default())
 	}
 }
