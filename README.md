@@ -14,11 +14,13 @@ Transform boring commit messages like `fix typo` or `updated config` into Victor
 
 ## 🚀 Key Features
 
-- 🎭 **Theatrical Persona Escalation**: Automatically assigns a persona (*Victorian Gothic*, *Soap Opera*, or *Shakespearean Tragedy*) based on diff line counts and sensitive file changes (`go.mod`, `Dockerfile`, `.github/workflows/*`).
+- 🎭 **Theatrical Persona Escalation**: Automatically assigns a persona (*Victorian Gothic*, *Soap Opera*, or *Shakespearean Tragedy*) based on diff line counts and sensitive file changes (`go.mod`, `go.sum`, `Dockerfile`, `Makefile`, `.github/workflows/*`).
 - 🖥️ **Interactive Terminal Preview (TUI)**: Review, edit (`e`), regenerate (`r`), or accept (`enter`) generated commit messages interactively before committing.
 - ⚡ **Zero-Block Fallback System**: If network requests fail, timeout (default `2500ms`), or an API key is missing, `tocommit` instantly generates a clean conventional fallback commit without blocking your git flow.
-- 🛡️ **Zero-Leak Security**: `GROQ_API_KEY` is read strictly from environment variables and is **never written to config files or disk**.
+- 🛡️ **Zero-Leak Security**: API keys (`GROQ_API_KEY`, `OPENAI_API_KEY`, or `TOCOMMIT_API_KEY`) are read strictly from environment variables and are **never written to config files or disk**.
 - 🛠️ **Smart Bypass**: Automatically skips execution for automated commits (`-m`, `-F`, `--amend`, `merge`, `squash`) to preserve git integrity.
+- 🔌 **Multi-Provider**: Works with Groq, OpenAI, local Ollama, or any OpenAI-compatible endpoint via `base_url`.
+- 🔍 **Debug Mode**: Set `TOCOMMIT_DEBUG=1` (or pass `--debug`) to see the chosen provider/model/persona and the reason behind any fallback.
 
 ---
 
@@ -38,11 +40,22 @@ Alternatively, download pre-built release binaries for macOS, Linux, or Windows 
 
 ### 2. Set API Key
 
-Set your [Groq API Key](https://console.groq.com) in your environment:
+Set your provider's key in your environment. Groq is the default:
 
 ```zsh
 export GROQ_API_KEY="gsk_your_groq_api_key"
 ```
+
+Supported providers:
+
+| `provider` | Endpoint | API key env var |
+| :--- | :--- | :--- |
+| `groq` (default) | Groq | `GROQ_API_KEY` |
+| `openai` | OpenAI | `OPENAI_API_KEY` |
+| `ollama` | local Ollama | *(none required)* |
+| `openai-compatible` | any OpenAI-compatible endpoint (`base_url`) | `OPENAI_API_KEY` |
+
+`TOCOMMIT_API_KEY` overrides all of the above if set. **Keys are read from the environment only and are never written to disk.**
 
 ### 3. Install the Git Hook
 
@@ -73,6 +86,12 @@ git commit
 > [!TIP]
 > Do **not** pass `-m` when committing if you want `tocommit` to generate a message. Passing `-m` or `-F` intentionally bypasses hook generation.
 
+Check the installed version with:
+
+```zsh
+tocommit --version
+```
+
 ---
 
 ## 🎭 Persona Tiers & Severity Scoring
@@ -83,12 +102,14 @@ git commit
 | :--- | :--- | :--- | :--- |
 | **Minor** | `< 10` total lines modified | **Victorian Gothic** | *Dark, melancholic, reflective lamentation* |
 | **Medium** | `10 - 100` lines modified | **Soap Opera** | *High drama, sudden betrayals, plot twists* |
-| **Catastrophic** | `> 100` lines, or touches `go.mod`, `Dockerfile`, `.github/workflows/*` | **Shakespearean Tragedy** | *Grand theatrical tragedy in iambic pentameter* |
+| **Catastrophic** | `> 100` lines, or touches an override path (`go.mod`, `go.sum`, `Dockerfile`, `Makefile`, `.github/workflows/*`) | **Shakespearean Tragedy** | *Grand theatrical tragedy in iambic pentameter* |
 
 You can also explicitly override the persona when running commands:
 ```zsh
 tocommit run .git/COMMIT_EDITMSG --persona soap-opera
 ```
+
+The override paths are configurable via `severity_overrides` (see [Configuration](#️-configuration)).
 
 ---
 
@@ -126,18 +147,24 @@ Or manually create/edit `~/.config/tocommit/config.yaml`:
 ```yaml
 provider: groq
 model: llama-3.3-70b-versatile
+base_url: ""          # only for provider: openai-compatible
 timeout_ms: 2500
 tui: true
 persona: ""
+severity_overrides: [] # extra paths that force the Catastrophic tier
 ```
 
 | Setting | Default | Description |
 | :--- | :--- | :--- |
-| `provider` | `groq` | LLM provider (`groq` supported in v1) |
-| `model` | `llama-3.3-70b-versatile` | Model name on Groq inference platform |
-| `timeout_ms` | `2500` | Max wait time before silent fallback |
+| `provider` | `groq` | LLM provider (`groq`, `openai`, `ollama`, `openai-compatible`) |
+| `model` | `llama-3.3-70b-versatile` | Model name on the provider |
+| `base_url` | `""` | Custom endpoint; required for `provider: openai-compatible` |
+| `timeout_ms` | `2500` | Max wait time before silent fallback (1–60000) |
 | `tui` | `true` | Enables interactive preview screen |
 | `persona` | `""` | Optional forced default persona (empty = auto-severity) |
+| `severity_overrides` | `[]` | Path patterns (globs, `dir/`, or basenames) that force Catastrophic; empty uses the built-in defaults |
+
+Invalid config never blocks a commit: `tocommit` prints a warning, writes a conventional fallback message, and lets git proceed. Run `tocommit config` to fix it.
 
 ---
 
@@ -151,12 +178,28 @@ cmd/
 ├── install.go         # Hook installer & path resolver (core.hooksPath support)
 └── config.go          # Interactive configuration wizard
 internal/
-├── config/            # YAML config parser & environment loader
+├── config/            # YAML config parser, validation & environment loader
 ├── diff/              # Git diff collector & numstat parser
-├── llm/               # LLM client interface, Groq adapter & message validator
+├── llm/               # LLM client interface, OpenAI-compatible client & message validator
+├── logx/              # Opt-in debug logging
 ├── severity/          # Severity scoring engine & persona resolver
 └── tui/               # Bubble Tea terminal preview UI
 ```
+
+---
+
+## 🔧 Troubleshooting
+
+Enable debug logging to see what `tocommit` is doing:
+
+```zsh
+TOCOMMIT_DEBUG=1 git commit
+```
+
+This prints the provider, model, resolved persona, and the reason for any fallback (missing API key, timeout, HTTP status, invalid commit message, or config error).
+
+> [!NOTE]
+> When the LLM is unreachable or returns a message that isn't a valid conventional commit, `tocommit` writes a clean fallback (`chore: update N file(s) (+X/-Y)`) so your commit still goes through.
 
 ---
 
