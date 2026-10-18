@@ -17,6 +17,7 @@ const maxTimeoutMS = 60000
 type Config struct {
 	Provider          string   `yaml:"provider"`
 	Model             string   `yaml:"model"`
+	FallbackModels    []string `yaml:"fallback_models,omitempty"`
 	BaseURL           string   `yaml:"base_url,omitempty"`
 	TimeoutMS         int      `yaml:"timeout_ms"`
 	TUI               bool     `yaml:"tui"`
@@ -37,10 +38,69 @@ var validProviders = map[string]bool{
 func Default() Config {
 	return Config{
 		Provider:  "groq",
-		Model:     "llama-3.3-70b-versatile",
+		Model:     "openai/gpt-oss-120b",
 		TimeoutMS: 2500,
 		TUI:       true,
 	}
+}
+
+// DefaultFallbackModels returns the models tocommit tries, in order, after the
+// configured model when the user has not supplied their own fallback_models.
+// Groq is the default provider and retires models periodically, so it ships a
+// short list of current alternatives; the other providers default to none.
+func DefaultFallbackModels(provider string) []string {
+	switch ProviderLabel(provider) {
+	case "groq":
+		return []string{"openai/gpt-oss-20b", "qwen/qwen3.8-27b"}
+	default:
+		return nil
+	}
+}
+
+// ProviderLabel returns a display name for a provider, resolving the empty
+// string to the default provider.
+func ProviderLabel(provider string) string {
+	if provider == "" {
+		return "groq"
+	}
+	return provider
+}
+
+// KeyEnvVar returns the environment variable tocommit reads a provider's API
+// key from. An empty result means the provider needs no key (Ollama). Note that
+// TOCOMMIT_API_KEY overrides this at load time.
+func KeyEnvVar(provider string) string {
+	switch provider {
+	case "openai", "openai-compatible":
+		return "OPENAI_API_KEY"
+	case "ollama":
+		return ""
+	default: // "", "groq"
+		return "GROQ_API_KEY"
+	}
+}
+
+// Models returns the ordered, de-duplicated list of models to try: the
+// configured model first, then the configured fallback_models, or the
+// provider's built-in fallbacks when none are configured. Blank entries are
+// dropped.
+func (c Config) Models() []string {
+	fallbacks := c.FallbackModels
+	if len(fallbacks) == 0 {
+		fallbacks = DefaultFallbackModels(c.Provider)
+	}
+
+	seen := make(map[string]bool, len(fallbacks)+1)
+	models := make([]string, 0, len(fallbacks)+1)
+	for _, m := range append([]string{c.Model}, fallbacks...) {
+		m = strings.TrimSpace(m)
+		if m == "" || seen[m] {
+			continue
+		}
+		seen[m] = true
+		models = append(models, m)
+	}
+	return models
 }
 
 // Validate reports configuration that would make the hook misbehave. It is kept
@@ -58,6 +118,11 @@ func (c Config) Validate() error {
 	}
 	if c.Persona != "" && !severity.IsValidPersona(c.Persona) {
 		return fmt.Errorf("unknown persona %q; valid: %s", c.Persona, strings.Join(severity.ValidPersonas(), ", "))
+	}
+	for i, m := range c.FallbackModels {
+		if strings.TrimSpace(m) == "" {
+			return fmt.Errorf("fallback_models[%d] must not be empty", i)
+		}
 	}
 	if c.BaseURL != "" {
 		u, err := url.Parse(c.BaseURL)
@@ -95,14 +160,10 @@ func resolveAPIKey(provider string) string {
 	if v := os.Getenv("TOCOMMIT_API_KEY"); v != "" {
 		return v
 	}
-	switch provider {
-	case "openai", "openai-compatible":
-		return os.Getenv("OPENAI_API_KEY")
-	case "ollama":
-		return ""
-	default: // "", "groq"
-		return os.Getenv("GROQ_API_KEY")
+	if env := KeyEnvVar(provider); env != "" {
+		return os.Getenv(env)
 	}
+	return ""
 }
 
 // DefaultPath returns the standard user location for tocommit's config file.

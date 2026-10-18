@@ -15,8 +15,8 @@ func TestDefault(t *testing.T) {
 	if cfg.Provider != "groq" {
 		t.Errorf("Provider = %q, want groq", cfg.Provider)
 	}
-	if cfg.Model != "llama-3.3-70b-versatile" {
-		t.Errorf("Model = %q, want llama-3.3-70b-versatile", cfg.Model)
+	if cfg.Model != "openai/gpt-oss-120b" {
+		t.Errorf("Model = %q, want openai/gpt-oss-120b", cfg.Model)
 	}
 	if cfg.TimeoutMS != 2500 {
 		t.Errorf("TimeoutMS = %d, want 2500", cfg.TimeoutMS)

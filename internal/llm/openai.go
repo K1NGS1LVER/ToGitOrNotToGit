@@ -37,15 +37,31 @@ var commitLineRe = regexp.MustCompile(
 type OpenAIClient struct {
 	APIKey     string
 	Model      string
+	Provider   string
 	BaseURL    string
 	HTTPClient *http.Client
 }
 
-// New builds a client for the provider described by cfg.
+// New builds a client for the provider described by cfg. When cfg resolves to
+// more than one model (a primary plus fallbacks), the returned client cascades
+// through them, advancing only when a model is reported unavailable.
 func New(cfg config.Config) Client {
+	models := cfg.Models()
+	if len(models) <= 1 {
+		return newOpenAIClient(cfg, cfg.Model)
+	}
+	return &fallbackClient{
+		models: models,
+		build:  func(model string) Client { return newOpenAIClient(cfg, model) },
+	}
+}
+
+// newOpenAIClient builds a client bound to a single model.
+func newOpenAIClient(cfg config.Config, model string) *OpenAIClient {
 	return &OpenAIClient{
 		APIKey:     cfg.APIKey,
-		Model:      cfg.Model,
+		Model:      model,
+		Provider:   config.ProviderLabel(cfg.Provider),
 		BaseURL:    baseURLFor(cfg),
 		HTTPClient: &http.Client{},
 	}
@@ -70,6 +86,7 @@ func NewGroqClient(apiKey, model string) *OpenAIClient {
 	return &OpenAIClient{
 		APIKey:     apiKey,
 		Model:      model,
+		Provider:   "groq",
 		BaseURL:    groqBaseURL,
 		HTTPClient: &http.Client{},
 	}
@@ -124,9 +141,14 @@ func validateMessage(msg string) error {
 	return nil
 }
 
+// fail builds a categorized *Error carrying this client's provider and model.
+func (c *OpenAIClient) fail(kind ErrorKind, err error, msg string) *Error {
+	return &Error{Kind: kind, Provider: c.Provider, Model: c.Model, Message: msg, Err: err}
+}
+
 func (c *OpenAIClient) Generate(ctx context.Context, req Request) (string, error) {
 	if c.APIKey == "" {
-		return "", errors.New("llm: missing API key")
+		return "", c.fail(KindAuth, nil, "missing API key")
 	}
 
 	body := chatRequest{
@@ -139,38 +161,49 @@ func (c *OpenAIClient) Generate(ctx context.Context, req Request) (string, error
 
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return "", fmt.Errorf("llm: marshaling request: %w", err)
+		return "", c.fail(KindUnknown, err, "marshaling request")
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL, bytes.NewReader(payload))
 	if err != nil {
-		return "", fmt.Errorf("llm: building request: %w", err)
+		return "", c.fail(KindUnknown, err, "building request")
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
 
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
-		return "", fmt.Errorf("llm: request failed: %w", err)
+		kind := KindNetwork
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			kind = KindTimeout
+		}
+		return "", c.fail(kind, err, "request failed")
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return "", fmt.Errorf("llm: unexpected status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		code, message := parseProviderError(raw)
+		return "", &Error{
+			Kind:     classify(resp.StatusCode, code, message),
+			Status:   resp.StatusCode,
+			Provider: c.Provider,
+			Model:    c.Model,
+			Message:  message,
+		}
 	}
 
 	var parsed chatResponse
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		return "", fmt.Errorf("llm: decoding response: %w", err)
+		return "", c.fail(KindInvalidOutput, err, "decoding response")
 	}
 	if len(parsed.Choices) == 0 {
-		return "", errors.New("llm: empty response")
+		return "", c.fail(KindInvalidOutput, nil, "empty response")
 	}
 
 	raw := strings.TrimSpace(parsed.Choices[0].Message.Content)
 	if err := validateMessage(raw); err != nil {
-		return "", fmt.Errorf("llm: invalid commit message: %w", err)
+		return "", c.fail(KindInvalidOutput, err, "invalid commit message")
 	}
 	return raw, nil
 }
