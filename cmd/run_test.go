@@ -190,7 +190,9 @@ var errTestLLMFailure = context.DeadlineExceeded
 func TestRunHook_SkipsTUIWhenNotTTY(t *testing.T) {
 	dir := t.TempDir()
 	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
-	os.WriteFile(msgFile, []byte(""), 0o644)
+	if err := os.WriteFile(msgFile, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, &fakeClient{message: "feat: plain message"})
 	deps.Config = func() (config.Config, error) {
@@ -210,7 +212,9 @@ func TestRunHook_SkipsTUIWhenNotTTY(t *testing.T) {
 func TestRunHook_SkipsTUIWhenDisabledInConfig(t *testing.T) {
 	dir := t.TempDir()
 	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
-	os.WriteFile(msgFile, []byte(""), 0o644)
+	if err := os.WriteFile(msgFile, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, &fakeClient{message: "feat: plain message"})
 	deps.IsTTY = func() bool { return true }
@@ -234,7 +238,9 @@ func TestRunHook_SkipsTUIWhenDisabledInConfig(t *testing.T) {
 func TestRunHook_TUIAcceptedWritesFinalMessage(t *testing.T) {
 	dir := t.TempDir()
 	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
-	os.WriteFile(msgFile, []byte(""), 0o644)
+	if err := os.WriteFile(msgFile, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, &fakeClient{message: "feat: draft message"})
 	deps.IsTTY = func() bool { return true }
@@ -261,7 +267,9 @@ func TestRunHook_TUIAcceptedWritesFinalMessage(t *testing.T) {
 func TestRunHook_TUICancelledAbortsCommit(t *testing.T) {
 	dir := t.TempDir()
 	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
-	os.WriteFile(msgFile, []byte("original"), 0o644)
+	if err := os.WriteFile(msgFile, []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, &fakeClient{message: "feat: draft message"})
 	deps.IsTTY = func() bool { return true }
@@ -286,7 +294,9 @@ func TestRunHook_TUICancelledAbortsCommit(t *testing.T) {
 func TestRunHook_TUIErrorFallsBackToPlainWrite(t *testing.T) {
 	dir := t.TempDir()
 	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
-	os.WriteFile(msgFile, []byte(""), 0o644)
+	if err := os.WriteFile(msgFile, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, &fakeClient{message: "feat: draft message"})
 	deps.IsTTY = func() bool { return true }
@@ -312,7 +322,9 @@ var errTUIBroken = errors.New("tui: program failed to start")
 func TestRunHook_TUIRegenerateSuccessCallsLLMAgain(t *testing.T) {
 	dir := t.TempDir()
 	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
-	os.WriteFile(msgFile, []byte(""), 0o644)
+	if err := os.WriteFile(msgFile, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	client := &fakeClient{messages: []string{"feat: first draft", "feat: second draft"}}
 	deps := testDeps(diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}, client)
@@ -344,7 +356,9 @@ func TestRunHook_TUIRegenerateSuccessCallsLLMAgain(t *testing.T) {
 func TestRunHook_TUIRegenerateErrorReturnsFallbackText(t *testing.T) {
 	dir := t.TempDir()
 	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
-	os.WriteFile(msgFile, []byte(""), 0o644)
+	if err := os.WriteFile(msgFile, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	client := &fakeClient{message: "feat: first draft"}
 	deps := testDeps(diff.Stats{FilesChanged: 2, Insertions: 5, Deletions: 1}, client)

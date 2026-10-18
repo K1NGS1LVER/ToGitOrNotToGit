@@ -28,7 +28,7 @@ func chdir(t *testing.T, dir string) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chdir(old) })
+	t.Cleanup(func() { _ = os.Chdir(old) })
 }
 
 func TestInstallThenUninstall(t *testing.T) {

@@ -7,9 +7,9 @@ import (
 
 func TestParseNumstat(t *testing.T) {
 	tests := []struct {
-		name    string
-		output  string
-		want    Stats
+		name   string
+		output string
+		want   Stats
 	}{
 		{
 			name:   "single text file",

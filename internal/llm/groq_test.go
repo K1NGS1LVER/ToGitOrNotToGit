@@ -19,7 +19,7 @@ func TestGroqClient_Generate_Success(t *testing.T) {
 		resp.Choices = []struct {
 			Message chatMessage `json:"message"`
 		}{{Message: chatMessage{Role: "assistant", Content: "feat(auth): a tale of two tokens"}}}
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -39,7 +39,7 @@ func TestGroqClient_Generate_NonOKStatus(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"error": map[string]string{
 				"message": "invalid api key",
 			},
