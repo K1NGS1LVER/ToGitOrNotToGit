@@ -112,6 +112,13 @@ git add .
 git commit
 ```
 
+That normal `git commit` path runs the installed `prepare-commit-msg` hook,
+which asks `tocommit` to generate the commit message using the configured
+custom persona or the severity-selected preset. This keeps the generated
+messages in the repository history as evidence that the tool was used. Avoid
+`git commit -m` and `git commit -F` when you want the hook to generate the
+message; those modes intentionally bypass generation.
+
 > [!TIP]
 > Do **not** pass `-m` when committing if you want `tocommit` to generate a message. Passing `-m` or `-F` intentionally bypasses hook generation.
 
