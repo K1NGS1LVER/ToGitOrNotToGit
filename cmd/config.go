@@ -109,8 +109,8 @@ func validateTimeoutMS(s string) error {
 }
 
 func validatePersonaInput(s string) error {
-	if s != "" && !severity.IsValidPersona(s) {
-		return fmt.Errorf("valid: %s", strings.Join(severity.ValidPersonas(), ", "))
+	if s != "" && !severity.ValidatePersona(s) {
+		return fmt.Errorf("persona must not be blank")
 	}
 	return nil
 }

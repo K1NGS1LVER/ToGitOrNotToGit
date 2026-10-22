@@ -39,8 +39,7 @@ func ValidPersonas() []string {
 	return []string{PersonaVictorianGothic, PersonaSoapOpera, PersonaShakespearean}
 }
 
-// IsValidPersona reports whether name is a known persona. The empty string is
-// not a persona; callers that treat "" as "auto-detect" must handle it first.
+// IsValidPersona reports whether name is one of the built-in personas.
 func IsValidPersona(name string) bool {
 	for _, p := range ValidPersonas() {
 		if p == name {
@@ -48,6 +47,13 @@ func IsValidPersona(name string) bool {
 		}
 	}
 	return false
+}
+
+// ValidatePersona reports whether a persona input is usable. Built-in names
+// and user-defined descriptions are both accepted; an empty value means
+// auto-detect and is handled by callers.
+func ValidatePersona(name string) bool {
+	return strings.TrimSpace(name) != ""
 }
 
 // DefaultOverridePatterns forces the Catastrophic tier for changes that touch

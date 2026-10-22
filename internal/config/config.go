@@ -116,8 +116,8 @@ func (c Config) Validate() error {
 	if c.TimeoutMS <= 0 || c.TimeoutMS > maxTimeoutMS {
 		return fmt.Errorf("timeout_ms must be between 1 and %d (got %d)", maxTimeoutMS, c.TimeoutMS)
 	}
-	if c.Persona != "" && !severity.IsValidPersona(c.Persona) {
-		return fmt.Errorf("unknown persona %q; valid: %s", c.Persona, strings.Join(severity.ValidPersonas(), ", "))
+	if c.Persona != "" && !severity.ValidatePersona(c.Persona) {
+		return errors.New("persona must not be blank")
 	}
 	for i, m := range c.FallbackModels {
 		if strings.TrimSpace(m) == "" {

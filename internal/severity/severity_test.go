@@ -79,6 +79,19 @@ func TestIsValidPersona(t *testing.T) {
 	}
 }
 
+func TestValidatePersona(t *testing.T) {
+	for _, persona := range []string{"victorian-gothic", "Tom and Jerry", "Ben Tennyson - a superhero from a cartoon show"} {
+		if !ValidatePersona(persona) {
+			t.Errorf("ValidatePersona(%q) = false, want true", persona)
+		}
+	}
+	for _, persona := range []string{"", "   ", "\t"} {
+		if ValidatePersona(persona) {
+			t.Errorf("ValidatePersona(%q) = true, want false", persona)
+		}
+	}
+}
+
 func TestTier_Persona(t *testing.T) {
 	tests := []struct {
 		tier Tier

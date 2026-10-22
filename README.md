@@ -108,7 +108,13 @@ tocommit --version
 You can also explicitly override the persona when running commands:
 ```zsh
 tocommit run .git/COMMIT_EDITMSG --persona soap-opera
+tocommit run .git/COMMIT_EDITMSG --persona "Ben Tennyson - a superhero from a cartoon show"
 ```
+
+Custom personas are accepted as free-form text. You may provide just a character
+name, such as `Tom and Jerry`, or include a description after a hyphen. The
+configured persona is used as the default; an explicit `--persona` override
+takes precedence, and an empty value keeps severity-based auto-detection.
 
 The override paths are configurable via `severity_overrides` (see [Configuration](#️-configuration)).
 
@@ -164,7 +170,7 @@ severity_overrides: [] # extra paths that force the Catastrophic tier
 | `base_url` | `""` | Custom endpoint; required for `provider: openai-compatible` |
 | `timeout_ms` | `2500` | Max wait time before silent fallback (1–60000) |
 | `tui` | `true` | Enables interactive preview screen |
-| `persona` | `""` | Optional forced default persona (empty = auto-severity) |
+| `persona` | `""` | Optional built-in or custom persona (empty = auto-severity) |
 | `severity_overrides` | `[]` | Path patterns (globs, `dir/`, or basenames) that force Catastrophic; empty uses the built-in defaults |
 
 Invalid config never blocks a commit: `tocommit` prints a warning, writes a conventional fallback message, and lets git proceed. Run `tocommit config` to fix it.
