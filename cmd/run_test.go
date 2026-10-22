@@ -411,9 +411,15 @@ func TestRunHook_PersonaOverrideReachesLLM(t *testing.T) {
 }
 
 func TestValidatePersona_InvalidReturnsError(t *testing.T) {
-	err := validatePersona("invalid")
+	err := validatePersona("   ")
 	if err == nil {
 		t.Fatal("expected error for invalid persona")
+	}
+}
+
+func TestValidatePersona_CustomReturnsNil(t *testing.T) {
+	if err := validatePersona("Tom and Jerry"); err != nil {
+		t.Fatalf("expected custom persona to be accepted, got %v", err)
 	}
 }
 
@@ -443,5 +449,33 @@ func TestRunHook_EmptyPersonaAutoDetects(t *testing.T) {
 	// Empty persona should resolve via severity.Score, same as existing behavior
 	if want := "victorian-gothic"; client.gotReq.Persona != want {
 		t.Errorf("request Persona = %q, want %q (auto-detected)", client.gotReq.Persona, want)
+	}
+}
+
+func TestRunHook_ConfigPersonaReachesLLM(t *testing.T) {
+	dir := t.TempDir()
+	msgFile := filepath.Join(dir, "COMMIT_EDITMSG")
+	if err := os.WriteFile(msgFile, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stats := diff.Stats{FilesChanged: 1, Insertions: 3, Deletions: 1}
+	client := &fakeClient{message: "feat: custom persona"}
+	deps := testDeps(stats, client)
+	deps.Config = func() (config.Config, error) {
+		return config.Config{
+			Provider: "groq", Model: "m", TimeoutMS: 2500, APIKey: "k",
+			Persona: "  Ben Tennyson - a superhero from a cartoon show  ",
+		}, nil
+	}
+
+	if err := runHook(msgFile, "", "", deps); err != nil {
+		t.Fatalf("runHook returned error: %v", err)
+	}
+	if client.gotReq == nil {
+		t.Fatal("client did not receive a request")
+	}
+	if want := "Ben Tennyson - a superhero from a cartoon show"; client.gotReq.Persona != want {
+		t.Errorf("request Persona = %q, want %q", client.gotReq.Persona, want)
 	}
 }

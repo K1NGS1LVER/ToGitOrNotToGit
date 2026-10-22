@@ -18,8 +18,8 @@ import (
 )
 
 func validatePersona(name string) error {
-	if name != "" && !severity.IsValidPersona(name) {
-		return fmt.Errorf("unknown persona %q; valid: %s", name, strings.Join(severity.ValidPersonas(), ", "))
+	if name != "" && !severity.ValidatePersona(name) {
+		return fmt.Errorf("persona must not be blank")
 	}
 	return nil
 }
@@ -127,7 +127,10 @@ func runHook(msgFile, source, persona string, deps hookDeps) error {
 	}
 
 	tier := severity.Score(stats, cfg.SeverityOverrides)
-	resolvedPersona := persona
+	resolvedPersona := strings.TrimSpace(persona)
+	if resolvedPersona == "" {
+		resolvedPersona = strings.TrimSpace(cfg.Persona)
+	}
 	if resolvedPersona == "" {
 		resolvedPersona = tier.Persona()
 	}
